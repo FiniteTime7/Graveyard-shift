@@ -136,6 +136,37 @@ body.tvmode .app,body.tvmode nav.tabs{display:none}
 .tv .join p{font-size:clamp(16px,1.8vw,30px);margin:0}
 .tv .award{font-size:clamp(13px,1.3vw,22px)}
 @media (max-width:760px){.tv{grid-template-columns:1fr}}
+.board-slot canvas{display:block;width:100%;aspect-ratio:4/3;height:auto;border-radius:14px;background:#1d1320;border:1px solid var(--stone);touch-action:none;-webkit-user-select:none;user-select:none}
+.board-slot canvas[data-pad]{border-color:var(--ember);box-shadow:0 0 24px #ff7a1a33}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:10px}
+.swatches{display:flex;gap:8px}
+.sw{width:34px;height:34px;border-radius:99px;border:2px solid var(--stone);padding:0}
+.sw[aria-pressed="true"]{border-color:var(--night);box-shadow:0 0 0 3px var(--bone)}
+.sabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sabs .chip{align-items:flex-start}
+@media (max-width:420px){.sabs{grid-template-columns:1fr}}
+.tvp{grid-template-columns:1.5fr 1fr}
+.tvp .who{font-family:var(--f-display);font-size:clamp(36px,5vw,96px);color:var(--ember);line-height:1;overflow-wrap:anywhere}
+.tvp .board-slot{width:100%;max-width:calc(64vh * 1.3333)}
+.tvtimer{font-family:var(--f-display);font-size:clamp(60px,9vw,170px);color:var(--ember);line-height:1}
+.feed{display:flex;flex-direction:column;gap:6px}
+.gf{font-size:clamp(16px,1.8vw,32px);color:var(--ash);overflow-wrap:anywhere}.gf span{color:var(--bone)}.gf.ok{color:var(--moss);font-weight:700}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.gallery figure{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.gallery figcaption{font-size:14px}
+.lb.tl .r{grid-template-columns:70px 1fr 0}
+.lb.tl .n{font-size:13px}
+body.easelmode .app{max-width:1000px}
+.easel{max-width:960px;margin:0 auto;width:100%}
+.easel .board-slot{max-width:calc((100vh - 340px) * 1.3333);min-width:280px;margin:0 auto}
+.easel .tools{max-width:calc((100vh - 340px) * 1.3333);min-width:280px;margin:10px auto 0}
+body.easelmode header.top{display:none}
+body.easelmode .app{padding-bottom:24px}
+.easel .panel{padding:10px 14px}
+.easel .sw{width:46px;height:46px}
+.easel .seg button{padding:10px 16px;font-size:16px}
+body.easelmode{overscroll-behavior:none}
+button{touch-action:manipulation}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -235,15 +266,16 @@ const uid=()=>"p"+Math.random().toString(36).slice(2,9);
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 function toast(t){const el=document.createElement("div");el.className="toast";el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
 const defaults=()=>({created:Date.now(),players:{},cats:JSON.parse(JSON.stringify(CATS)),killerCount:1,
-  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null});
+  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null,pict:{status:"off",game:0},pictDeck:"mix",sab:{last:{},hit:{}},event:null,awards:null});
 
 /* ================= app state ================= */
 const hash=location.hash.replace(/^#/,"");
-const MODE=hash==="tv"?"tv":"phone";
+const MODE=hash==="tv"?"tv":hash==="recap"?"recap":(hash==="easel"||hash==="ipad")?"easel":"phone";
+const EASEL=MODE==="easel";
 if(hash==="host-"+HOST_KEY)ls.set("gs-host-"+PARTY_ID,"1");
-const IS_HOST=(hash==="host-"+HOST_KEY||ls.get("gs-host-"+PARTY_ID)==="1")&&MODE!=="tv";
+const IS_HOST=(hash==="host-"+HOST_KEY||ls.get("gs-host-"+PARTY_ID)==="1")&&MODE==="phone";
 let ME=ls.get("gs-me-"+PARTY_ID);
-const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null};
+const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null,log:[],pg:[],draw:null};
 const ui={tab:"live",flow:null,draft:{},accPick:null,editPts:false,revealShown:null,hotUsed:[],used:{mild:[],spicy:[],unhinged:[]}};
 let FS,PARTY,FV;
 
@@ -257,7 +289,7 @@ const K=()=>S.main.killer||defaults().killer;
 const isOut=(id,g)=>!!(S.main.players[id]&&S.main.players[id].out&&S.main.players[id].out[g]);
 const inGame=g=>ids().filter(id=>!isOut(id,g));
 const kPlayers=()=>{const k=K();return (k.players&&k.players.length?k.players:ids()).filter(id=>S.main.players[id])};
-const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer"};
+const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer",pict:"Pictionary",sab:"Sabotage"};
 const accThisRound=()=>{const kp=kPlayers();return S.acc.filter(a=>a.round===K().round&&kp.includes(a.id))};
 const hotThisQ=()=>{const c=S.main.current;return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]&&!isOut(h.id,"hot")&&!isOut(h.pick,"hot")):[]};
 function level(){const L=S.main.dareLevel||"auto";if(L!=="auto")return L;const d=new Date(),h=d.getHours(),t=(h<12?h+24:h)*60+d.getMinutes();return t<23*60+30?"mild":t<25*60?"spicy":"unhinged"}
@@ -284,7 +316,7 @@ function planReveal(){
   Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
   return o;
 }
-function hostReveal(){if(S.main.reveal)return;return guarded(d=>JSON.stringify(d.reveal||null),planReveal())}
+function hostReveal(){if(S.main.reveal)return;return revealWrite()}
 function buildRoles(){
   const all=shuffle(inGame("killer"));if(all.length<4)return null;
   const n=Math.min(S.main.killerCount||1,Math.max(1,Math.floor(all.length/3))),killers=all.slice(0,n),ms=shuffle(METHODS),round=(K().round||0)+1;
@@ -303,11 +335,11 @@ async function planUnmask(){
   const right=acc.filter(a=>killers.includes(a.pick)&&!killers.includes(a.id)).map(a=>a.id);
   const add={};right.forEach(id=>add[id]=(add[id]||0)+3);
   const bodies=(k.dead||[]).length;killers.forEach(id=>add[id]=(add[id]||0)+2*bodies+(caught?0:5));
-  const o={"killer.status":"revealed","killer.at":Date.now(),"killer.result":{killers,top:topIds,caught,right,bodies,nonce:Date.now()}};
+  const o={"killer.status":"revealed","killer.at":Date.now(),"killer.result":{killers,top:topIds,caught,right,bodies,tally:t,round:k.round,nonce:Date.now()}};
   Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
   return o;
 }
-async function hostUnmask(){const exp=sigK(S.main);const o=await planUnmask();if(o)return guarded(sigK,o,null,exp)}
+async function hostUnmask(){const exp=sigK(S.main);const o=await planUnmask();if(o)return guarded(sigK,o,unmaskLog(o),exp)}
 function planDare(){
   const all=inGame("dares");if(all.length<2)return null;
   const lv=level(),pool=DARES[lv],usedAll=S.main.dareUsed||{};let used=(usedAll[lv]||[]).filter(i=>i<pool.length);if(used.length>=pool.length)used=[];
@@ -327,16 +359,16 @@ function planHotReveal(){const c=S.main.current;if(!c||c.type!=="hot"||c.win)ret
   win.forEach(id=>o["titles."+id]=FV.arrayUnion(c.q));return o}
 function planNext(){const c=S.main.current;return c&&c.type==="dare"?(planHot()||planDare()):(planDare()||planHot())}
 const sigC=d=>d.current?String(d.current.at)+(d.current.win?"w":"")+(d.current.done||""):"none";
-function hostDraw(){const o=planDare();if(!o){toast("Need at least 2 guests playing Dares");return}return guarded(sigC,o)}
-function hostHot(){const o=planHot();if(!o){toast("Need at least 3 guests playing Hot Seat");return}return guarded(sigC,o)}
-function hostHotReveal(){const o=planHotReveal();if(o)return guarded(sigC,o)}
+function hostDraw(){const o=planDare();if(!o){toast("Need at least 2 guests playing Dares");return}return adv(o)}
+function hostHot(){const o=planHot();if(!o){toast("Need at least 3 guests playing Hot Seat");return}return adv(o)}
+function hostHotReveal(){const o=planHotReveal();if(o)return adv(o)}
 /* Writes only if the party is still in the state the change was planned from, so two phones can't double-advance. */
 function guarded(sig,o,extra,expected){const exp=expected!==undefined?expected:sig(S.main);
   return FS.runTransaction(async t=>{const snap=await t.get(PARTY);const d=snap.exists?snap.data():null;if(!d||sig(d)!==exp)return false;if(extra)extra(t);t.update(PARTY,o);return true})
     .catch(e=>{console.warn(e);return false})}
 
 /* ================= autopilot ================= */
-const AUTO=()=>Object.assign({on:false,every:5,revealAt:"",killer:true},S.main&&S.main.auto||{});
+const AUTO=()=>Object.assign({on:false,every:5,revealAt:"",killer:true,awardsAt:"03:00"},S.main&&S.main.auto||{});
 const nightMins=d=>{const H=d.getHours();return (H<12?H+24:H)*60+d.getMinutes()};
 function revealDue(at){if(!at)return false;const [h,m]=at.split(":").map(Number);return nightMins(new Date())>=(h<12?h+24:h)*60+m}
 function fmtTime(at){if(!at)return"";const [h,m]=at.split(":").map(Number);return ((h%12)||12)+":"+String(m).padStart(2,"0")+(h>=12?"pm":"am")}
@@ -345,16 +377,17 @@ async function autoTick(){
   if(!S.main||ticking||!PARTY)return;const A=AUTO();if(!A.on)return;ticking=true;
   try{
     const now=Date.now(),m=S.main,R=m.reveal;
-    if(!R&&revealDue(A.revealAt)&&ballotCount()>=2){await guarded(d=>JSON.stringify(d.reveal||null),planReveal());return}
+    if(!R&&dueClock(A.revealAt)&&recentActivity()&&ballotCount()>=2){await revealWrite();return}
     if(R&&!R.done){if(now-(R.stepAt||R.nonce)>12000){const last=R.step>=R.results.length-1;
       await guarded(d=>d.reveal?d.reveal.step+":"+d.reveal.nonce+":"+d.reveal.done:"",last?{"reveal.done":true}:{"reveal.step":R.step+1,"reveal.stepAt":now})}return}
     const c=m.current;
-    if(c&&c.type==="hot"&&!c.win){const N=inGame("hot").length,n=hotThisQ().length;if((N&&n>=N)||now-c.at>90000){const o=planHotReveal();if(o)await guarded(sigC,o)}}
-    else if(!c||now-c.at>A.every*60000){const o=planNext();if(o)await guarded(sigC,o)}
+    if(pictActive()){}
+    else if(c&&c.type==="hot"&&!c.win){const N=inGame("hot").length,n=hotThisQ().length;if((N&&n>=N)||now-c.at>90000){const o=planHotReveal();if(o)await adv(o)}}
+    else if(!c||now-c.at>A.every*60000){const o=planNext();if(o)await adv(o)}
     if(A.killer){const k=K(),kp=kPlayers();
       if(k.status==="live"){const alive=kp.filter(id=>!(k.dead||[]).some(x=>x.id===id)).length;
         if(alive<=Math.max((m.killerCount||1)+2,Math.ceil(kp.length/2))||now-(k.at||now)>40*60000)await guarded(sigK,{"killer.status":"accusing","killer.at":now})}
-      else if(k.status==="accusing"){if(accThisRound().length>=kp.length||now-(k.at||now)>4*60000){const exp=sigK(m),o=await planUnmask();if(o)await guarded(sigK,o,null,exp)}}
+      else if(k.status==="accusing"){if(accThisRound().length>=kp.length||now-(k.at||now)>4*60000){const exp=sigK(m),o=await planUnmask();if(o)await guarded(sigK,o,unmaskLog(o),exp)}}
       else if(k.status==="revealed"&&now-(k.at||now)>10*60000){const r=buildRoles();if(r)await guarded(sigK,r.o,t=>r.roles.forEach(([id,d])=>t.set(PARTY.collection("roles").doc(id),d)))}
     }
   }finally{ticking=false}
@@ -362,8 +395,8 @@ async function autoTick(){
 async function clearCol(name){const s=await PARTY.collection(name).get();let b=FS.batch(),n=0;
   for(const d of s.docs){b.delete(d.ref);if(++n===450){await b.commit();b=FS.batch();n=0}}if(n)await b.commit()}
 async function hostReset(keepGuests){
-  try{await Promise.all(["ballots","acc","hotvotes","roles"].map(clearCol));
-    const d=defaults();if(keepGuests){d.players=S.main.players;d.cats=S.main.cats;d.killerCount=S.main.killerCount;if(S.main.auto)d.auto=S.main.auto}
+  try{await Promise.all(["ballots","acc","hotvotes","roles","log","pguess","draw"].map(clearCol));
+    const d=defaults();if(keepGuests){d.players=S.main.players;d.cats=S.main.cats;d.killerCount=S.main.killerCount;if(S.main.auto)d.auto=S.main.auto;d.pictDeck=S.main.pictDeck||"mix"}
     await PARTY.set(d);ui.flow=null;toast(keepGuests?"Games reset. Guests kept.":"Party wiped.")}catch(e){err(e)}
 }
 
@@ -460,16 +493,21 @@ function vLive(){
     ${c?`<button class="btn ghost" data-act="clearcur">Clear the screen</button>`:""}`):"";
   const A=AUTO(),age=c?Date.now()-c.at:1e9;
   const crowd=!IS_HOST&&A.on?`<p class="muted" style="margin:12px 0 0;font-size:14px">${nextIn()}</p><div style="height:10px"></div><button class="btn ghost" data-act="skipnext" ${age<20000?"disabled":""}>Skip to the next one</button>`:"";
-  return `<h2>Now playing</h2>${card}${crowd}${optRow("dares")}${optRow("hot")}${host}`;
+  const E=S.main.event,evb=E&&Date.now()-E.at<120000?`<div class="panel" style="border-color:var(--blood);margin-bottom:12px"><div class="award" style="color:var(--blood)">Sabotage</div><b>${esc(E.text)}</b></div>`:"";
+  const hx=hexOf(ME),hexb=hx?`<div class="panel" style="border-color:#9b7bd4;margin-bottom:12px"><div class="award" style="color:#9b7bd4">🕸 You're hexed</div><b>${esc(hx.text)}</b><p class="muted" style="margin:0;font-size:14px">Wears off in <b data-ends="${hx.until}"></b>.</p></div>`:"";
+  if(pictActive())return `<h2>Now playing</h2>${hexb}${evb}<div class="card"><div class="award" style="text-align:left">Pictionary is on</div><div class="what">Everything else is paused until it's over.</div></div><div style="height:12px"></div><button class="btn" data-act="tab" data-tab="pict">Go to Pictionary</button>${host}`;
+  return `<h2>Now playing</h2>${hexb}${evb}${card}${crowd}${optRow("dares")}${optRow("hot")}${host}`;
 }
 function ranked(){const pts=S.main.points||{},t=S.main.titles||{};return ids().map(id=>({id,pts:pts[id]||0,t:(t[id]||[]).length})).sort((a,b)=>b.pts-a.pts||nm(a.id).localeCompare(nm(b.id)))}
-function lbHtml(edit){const r=ranked(),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
-  return `<div class="lb">${r.map((x,i)=>`<div class="r ${top!==null&&x.pts===top?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(x.id))}${top!==null&&x.pts===top?" 👑":""}${k.status==="live"&&dead.includes(x.id)?" ☠":""}${x.id===ME&&MODE!=="tv"?" <span class=\"muted\">(you)</span>":""}${x.t?`<small>${x.t} hot-seat title${x.t>1?"s":""}</small>`:""}</span>${edit?`<span class="adj"><button data-act="pm" data-id="${x.id}" data-n="-1" aria-label="Minus one">−</button><button data-act="pm" data-id="${x.id}" data-n="1" aria-label="Plus one">+</button></span>`:`<span class="pts">${x.pts}</span>`}</div>`).join("")}</div>`}
+function lbHtml(edit,lim){const r=ranked().slice(0,lim||999),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
+  return `<div class="lb">${r.map((x,i)=>`<div class="r ${top!==null&&x.pts===top?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(x.id))}${top!==null&&x.pts===top?" 👑":""}${k.status==="live"&&dead.includes(x.id)?" ☠":""}${x.id===ME&&MODE!=="tv"?" <span class=\"muted\">(you)</span>":""}${x.t||hexOf(x.id)?`<small>${[x.t?x.t+" hot-seat title"+(x.t>1?"s":""):"",hexOf(x.id)?"🕸 hexed: "+esc(hexOf(x.id).text):""].filter(Boolean).join(" · ")}</small>`:""}</span>${edit?`<span class="adj"><button data-act="pm" data-id="${x.id}" data-n="-1" aria-label="Minus one">−</button><button data-act="pm" data-id="${x.id}" data-n="1" aria-label="Plus one">+</button></span>`:`<span class="pts">${x.pts}</span>`}</div>`).join("")}</div>`}
 function vBoard(){
   const titles=Object.entries(S.main.titles||{}).flatMap(([id,ts])=>(S.main.players[id]?ts:[]).map(t=>({id,t})));
   return `<h2>Leaderboard</h2><p class="muted">Top of the board at the end of the night is Party MVP.</p><div class="panel">${ids().length?lbHtml(ui.editPts):`<p class="muted" style="margin:0">No guests yet.</p>`}</div>
   ${titles.length?`<h3>Hot-seat titles</h3><div class="panel">${titles.slice(-15).reverse().map(x=>`<p style="margin:0 0 6px"><b>${esc(nm(x.id))}</b> <span class="muted">· most likely to ${esc(x.t)}</span></p>`).join("")}</div>`:""}
-  <h3>Your games</h3>${optRow("dares")}${optRow("hot")}${optRow("killer",K().status!=="off"&&K().status!=="revealed"?"Changes start next round.":"")}
+  ${sabPanel()}
+  <div style="height:14px"></div><button class="btn ghost" data-act="tab" data-tab="recap">${S.main.awards&&S.main.awards.done?"Open the morning-after recap":"Peek at the recap so far"}</button>
+  <h3>Your games</h3>${optRow("dares")}${optRow("hot")}${optRow("killer",K().status!=="off"&&K().status!=="revealed"?"Changes start next round.":"")}${optRow("pict")}${optRow("sab")}
   ${hostBox(`<button class="btn ghost" data-act="editpts">${ui.editPts?"Done adjusting":"Adjust points"}</button>`)}`;
 }
 function autoPanel(){const A=AUTO(),sel=(id,opts,val)=>`<select id="${id}">${opts.map(([v,l])=>`<option value="${v}" ${String(val)===String(v)?"selected":""}>${l}</option>`).join("")}</select>`;
@@ -477,19 +515,25 @@ function autoPanel(){const A=AUTO(),sel=(id,opts,val)=>`<select id="${id}">${opt
   <label class="toggle" for="au-every"><span>New dare or question every</span>${sel("au-every",[[3,"3 min"],[5,"5 min"],[8,"8 min"],[10,"10 min"],[15,"15 min"]],A.every)}</label>
   <label class="toggle" for="au-reveal"><span>Reveal costume winners at</span>${sel("au-reveal",[["","I'll do it"],["23:00","11:00pm"],["23:30","11:30pm"],["00:00","Midnight"],["00:30","12:30am"],["01:00","1:00am"],["01:30","1:30am"],["02:00","2:00am"]],A.revealAt)}</label>
   <label class="toggle" for="au-killer"><span>Run Killer rounds automatically</span><input type="checkbox" id="au-killer" ${A.killer?"checked":""}></label>`}
+function awardsPanel(){const A=AUTO(),W=S.main.awards,opts=[["off","Off"],["01:00","1:00am"],["02:00","2:00am"],["02:30","2:30am"],["03:00","3:00am"],["03:30","3:30am"],["04:00","4:00am"]];
+  return `<label class="toggle" for="au-awards" style="border:none;padding:0"><span>Hand out awards at<span class="muted" style="display:block;font-size:14px">Runs on its own, even with autopilot off.</span></span><select id="au-awards">${opts.map(([v,l])=>`<option value="${v}" ${A.awardsAt===v?"selected":""}>${l}</option>`).join("")}</select></label>
+  ${W?hold("awreplay","Replay the awards","ghost","Hold 1.3s · plays on every screen again"):hold("awnow","Hand out the awards now","","Hold 1.3s · plays on every screen")}
+  <p class="muted" style="margin:0;font-size:14px">Morning-after recap, to share tomorrow:</p><div class="mono">${esc(joinUrl())}#recap</div>`}
 function vHost(){
   const ps=players(),locked=S.ballots.length>0;
   const meIn=ME&&S.main.players[ME];
   return `<h2>Host desk</h2>${meIn?"":`<div class="panel stack" style="margin-bottom:12px"><b>You haven't joined as a player yet</b><p class="muted" style="margin:0">Join with your name to vote, get a Killer role and show up on the board.</p><button class="btn" data-act="tab" data-tab="live">Join the party</button></div>`}
   <div class="panel stack" style="align-items:center;text-align:center"><div class="award">Guests scan to join</div><div class="qr" id="qr" style="width:200px"></div><div class="mono">${esc(joinUrl())}</div>
-  <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end.</p></div>
+  <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end. On the Pictionary iPad, use <b style="color:var(--bone)">#easel</b>.</p></div>
   <h3>Party autopilot</h3><div class="panel">${autoPanel()}</div>
+  <h3>Party awards</h3><div class="panel stack">${awardsPanel()}</div>
   <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}${Object.keys(GAMES).filter(g=>isOut(p.id,g)).length?`<small>Sitting out: ${Object.keys(GAMES).filter(g=>isOut(p.id,g)).map(g=>GAMES[g]).join(", ")}</small>`:""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
   <h3>Costume awards</h3><div class="panel">${(S.main.cats||[]).map(c=>`<label class="toggle" for="cat-${c.id}"><span><b>${esc(c.label)}</b> <span class="muted">· ${c.pts} pts${c.fixed?" · always on":""}</span></span><input type="checkbox" id="cat-${c.id}" data-cat="${c.id}" ${c.on?"checked":""} ${c.fixed||locked?"disabled":""}></label>`).join("")}${locked?`<p class="muted" style="margin:8px 0 0;font-size:14px">Locked because ballots are already in.</p>`:""}</div>
   <h3>Reset</h3><div class="stack">${hold("resetgames","Reset games, keep guests","ghost","Hold 1.3s · clears votes, points, killer")}${hold("wipe","Wipe everything","red","Hold 1.3s · everyone has to rejoin")}</div>
   <p class="muted" style="margin-top:16px;font-size:14px">Want to play on a second device as host? Open your host link there too.</p>`;
 }
 function vTV(){
+  const PP=PI();if(pictActive()||(PP.status==="done"&&Date.now()-(PP.doneAt||0)<60000))return vTVPict();
   const N=ids().length,c=S.main.current,k=K();
   let now=`<div class="card"><div class="award" style="text-align:left">Up next</div><div class="what muted">Dares and hot-seat questions appear here.</div></div>`;
   if(c&&c.type==="dare")now=`<div class="card"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
@@ -511,7 +555,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v5</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v8</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -521,44 +565,324 @@ function renderInner(){
       :`<div class="panel stack"><h2>Not open yet</h2><p class="muted">The host hasn't opened the party. Try again in a bit.</p></div>`);
     put(layer,"");return;
   }
-  if(MODE==="tv"){document.body.classList.add("tvmode");put(document.getElementById("tvroot"),vTV());renderOverlay();drawQR();return}
+  if(MODE==="tv"){document.body.classList.add("tvmode");put(document.getElementById("tvroot"),vTV());renderOverlay();drawQR();attachCanvases();return}
+  if(MODE==="recap"){tabs.hidden=true;put(main,vRecap());put(layer,"");attachCanvases();return}
+  if(EASEL){document.body.classList.add("easelmode");tabs.hidden=true;document.getElementById("me").innerHTML=`<span class="hostpill" style="background:var(--ember);color:#1a0d05">DRAWING STATION</span>`;put(main,vEasel());renderOverlay();attachCanvases();return}
   const meName=ME&&S.main.players[ME]?S.main.players[ME].name:null;
   document.getElementById("me").innerHTML=meName?`playing as<b>${esc(meName)}</b>${IS_HOST?`<span class="hostpill">HOST</span>`:""}`:(IS_HOST?`<span class="hostpill">HOST</span>`:"");
   if(!meName&&ui.tab!=="host"){tabs.hidden=!IS_HOST;put(main,vJoin());renderTabs();renderOverlay();return}
   tabs.hidden=false;renderTabs();
-  const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null;
-  const v={live:vLive,vote:vVote,killer:vKiller,board:vBoard,host:vHost}[ui.tab]||vLive;
+  const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null,kv=keep?document.activeElement.value:null;
+  const PP=PI();if(PP.status==="ready"&&PP.drawer===ME&&ui.autoSw!==PP.turn){ui.autoSw=PP.turn;ui.tab="pict";buzz()}
+  const EV=S.main.event;if(EV&&EV.target===ME&&ui.evBuzz!==EV.at&&Date.now()-EV.at<60000){ui.evBuzz=EV.at;buzz();toast("😈 You've been sabotaged!")}
+  const v={live:vLive,vote:vVote,killer:vKiller,pict:vPict,board:vBoard,host:vHost,recap:vRecap}[ui.tab]||vLive;
   put(main,meName||ui.tab==="host"?v():vJoin());
-  if(keep){const i=document.getElementById(keep);i&&i.focus()}
-  renderOverlay();drawQR();
+  if(keep){const i=document.getElementById(keep);if(i){if(kv!=null&&i.value!==kv)i.value=kv;i.focus()}}
+  renderOverlay();drawQR();attachCanvases();
 }
 function renderTabs(){
   const k=K(),c=S.main.current,mine=myBallot();
   const t=[["live","🃏","Now",c&&!(c.type==="hot"&&(c.win||S.hot.some(h=>h.id===ME&&h.qid===c.qid)))&&ui.tab!=="live"],
-    ["vote","👑","Costumes",!mine&&!(S.main.reveal)],["killer","🔪","Killer",(k.status==="live"&&S.role&&S.role.round===k.round&&!(k.seen||[]).includes(ME))||(k.status==="accusing"&&!S.acc.some(a=>a.id===ME&&a.round===k.round))],["board","🏆","Board",false]];
+    ["vote","👑","Costumes",!mine&&!(S.main.reveal)],["killer","🔪","Killer",(k.status==="live"&&S.role&&S.role.round===k.round&&!(k.seen||[]).includes(ME))||(k.status==="accusing"&&!S.acc.some(a=>a.id===ME&&a.round===k.round))],
+    ["pict","🎨","Draw",ui.tab!=="pict"&&((PI().status==="ready"&&PI().drawer===ME)||(PI().status==="drawing"&&PI().drawer!==ME&&!isOut(ME,"pict")&&!S.pg.some(g=>g.id===ME&&g.turn===PI().turn&&g.ok)))],["board","🏆","Board",false]];
   if(IS_HOST)t.push(["host","⚙︎","Host",false]);
   const meIn=ME&&S.main.players[ME];
   put(document.getElementById("tabsin"),t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"style=\"opacity:.5\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join(""));
 }
 function renderOverlay(){
-  const layer=document.getElementById("layer"),R=S.main.reveal;
-  if(R&&!R.done&&R.results&&R.results[R.step]){put(layer,`<div class="ov">${fReveal()}</div>`);runCountdown();return}
+  const layer=document.getElementById("layer"),R=S.main.reveal,W=S.main.awards;
+  if(R&&!R.done&&R.results&&R.results[R.step]){put(layer,`<div class="ov">${fReveal()}</div>`);runCountdown(R.step+":"+R.nonce);return}
+  if(W&&!W.done&&W.list&&W.list[W.step]){put(layer,`<div class="ov">${fAwards()}</div>`);runCountdown("A"+W.step+":"+W.nonce);return}
+  const E=S.main.event;
+  if(MODE==="tv"&&E&&Date.now()-E.at<12000&&ui.evSeen!==E.at){put(layer,`<div class="ov"><div class="inner"><div class="award" style="color:var(--blood);font-size:clamp(14px,2vw,30px)">☠ Sabotage ☠</div><div class="winner" style="font-size:clamp(44px,8vw,130px)">${esc(nm(E.target))}</div><p style="font-size:clamp(20px,2.6vw,46px);font-weight:600;margin:0">${esc(E.text)}</p><div class="runners" style="font-size:clamp(14px,1.6vw,26px)">Someone paid ${E.cost} points for this.</div></div></div>`);
+    clearTimeout(ui.evT);ui.evT=setTimeout(()=>{ui.evSeen=E.at;render()},10000);return}
   const kr=K().result;
   if(MODE==="tv"&&K().status==="revealed"&&kr&&ui.unmaskSeen!==kr.nonce&&Date.now()-kr.nonce<20000){
     put(layer,`<div class="ov"><div class="inner">${killerResult(kr)}</div></div>`);clearTimeout(ui.unT);ui.unT=setTimeout(()=>{ui.unmaskSeen=kr.nonce;renderOverlay()},15000);return}
   put(layer,"");
 }
 let cdKey=null;
-function runCountdown(){const R=S.main.reveal,key=R.step+":"+R.nonce;if(ui.revealShown===key||cdKey===key)return;cdKey=key;
+function runCountdown(key){if(ui.revealShown===key||cdKey===key)return;cdKey=key;
   let n=3;const tick=()=>{if(cdKey!==key)return;const el=document.getElementById("cd");if(n>0){if(el){el.textContent=n;el.style.animation="none";void el.offsetWidth;el.style.animation=""}n--;setTimeout(tick,1000)}else{ui.revealShown=key;cdKey=null;render()}};tick()}
+
+/* ================= event log ================= */
+const logT=(t,o)=>t.set(PARTY.collection("log").doc(),Object.assign({at:Date.now()},o));
+const addLog=o=>PARTY.collection("log").add(Object.assign({at:Date.now()},o)).catch(()=>{});
+function adv(o){const q=S.main.current&&S.main.current.q;return guarded(sigC,o,t=>{
+  if(o.current&&o.current.type==="dare")logT(t,{type:"dared",pid:o.current.pid,text:o.current.text});
+  if(o["current.win"]&&o["current.win"].length)logT(t,{type:"hot",win:o["current.win"],q});
+})}
+function revealWrite(){const o=planReveal();return guarded(d=>JSON.stringify(d.reveal||null),o,t=>logT(t,{type:"costume",results:o.reveal.results}))}
+const unmaskLog=o=>t=>logT(t,Object.assign({type:"killer"},o["killer.result"]));
+const clock=ts=>new Date(ts).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+/* A timed event is due when the clock is within 3 hours after its time AND the party has been active in the last 90 minutes. */
+function dueClock(hhmm){if(!hhmm||hhmm==="off")return false;const [h,m]=hhmm.split(":").map(Number),d=new Date(),diff=(d.getHours()*60+d.getMinutes()-(h*60+m)+1440)%1440;return diff<180}
+function recentActivity(){const t=Math.max(0,...(S.log||[]).map(e=>e.at||0),...players().map(p=>p.joined||0),(S.main.current||{}).at||0,S.main.created||0);return Date.now()-t<90*60000}
+const buzz=()=>{try{navigator.vibrate&&navigator.vibrate([90,50,90])}catch(e){}};
+
+/* ================= pictionary ================= */
+const PICT={
+haunted:["Haunted house","Ouija board","Exorcism","Graveyard|cemetery","Coffin|casket","Possessed doll|creepy doll","Black cat","Witch on a broom|witch|broomstick","Jack-o'-lantern|pumpkin","Chainsaw","Séance","Bloody Mary","Headless horseman","Zombie","Werewolf","Vampire|dracula","Cauldron","Tombstone|gravestone","Mummy","Skeleton","Ghost","Bat","Spider web|cobweb|spiderweb","Crystal ball","Grim Reaper|reaper|death","Frankenstein","Candy corn","Trick or treat","Full moon","Scarecrow","Poltergeist","Body bag","Creepy clown|clown","Voodoo doll","Hearse"],
+dirty:["Walk of shame","Booty call","Skinny dipping","Handcuffs","Strip poker","Lap dance","Hickey|love bite","Body shots","Keg stand|kegstand","Beer goggles","Pole dancer|stripper pole","Nipple tassels","Sexting","Spanking|spank","Edible underwear","Thong","Hot tub","One night stand","Sugar daddy","Stripper","Morning wood","Threesome","Blindfold","Dirty dancing","Hangover","French kiss|making out","Whipped cream","Booty shorts","Sexy nurse","Mile high club","Friends with benefits|fwb","Fuzzy handcuffs","Dominatrix","Naughty witch","Sexy pumpkin"]};
+const PCOLORS=["#efe4d0","#ff7a1a","#e0475a","#a6c46f","#9b7bd4"],BOARD_BG="#1d1320";
+const PI=()=>Object.assign({status:"off",game:0},S.main&&S.main.pict||{});
+const pictActive=()=>["ready","drawing","reveal"].includes(PI().status);
+const easelOn=()=>Date.now()-((S.main&&S.main.easelSeen)||0)<90000;
+const iDraw=p=>EASEL?true:(MODE==="phone"&&p.drawer===ME&&!easelOn());
+const readyLimit=()=>easelOn()?90000:40000;
+function nextArtist(p){const o=p.order||[];for(let i=(p.idx||0)+1;i<o.length;i++)if(S.main.players[o[i]]&&!isOut(o[i],"pict"))return o[i];const extra=inGame("pict").find(id=>!o.includes(id));return extra||null}
+const sigP=d=>d.pict?(d.pict.status+":"+(d.pict.turn||"")+":"+(d.pict.game||0)):"off:0";
+const showWord=w=>String(w||"").split("|")[0];
+const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+function lev(a,b){if(Math.abs(a.length-b.length)>3)return 9;let p=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){const c=[i];for(let j=1;j<=b.length;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[b.length]}
+/* 0-1 = correct, 2 = close, more = wrong */
+function guessScore(g,w){const G=norm(g);if(!G)return 9;let best=9;String(w).split("|").forEach(a=>{const A=norm(a);if(!A)return;let d=(G===A||G===A+"s"||G+"s"===A)?0:lev(G,A);if(d===1&&A.length<5)d=2;best=Math.min(best,d)});return best}
+function pickWord(){const deck=S.main.pictDeck||"mix",pool=deck==="mix"?PICT.haunted.concat(PICT.dirty):PICT[deck]||PICT.haunted;
+  let used=(S.main.pictUsed||[]).filter(w=>pool.includes(w));if(used.length>=pool.length)used=[];const w=rnd(pool.filter(x=>!used.includes(x)));return {w,used:used.concat(w)}}
+function readyFields(order,idx){const pk=pickWord(),turn="t"+Date.now()+Math.random().toString(36).slice(2,5);
+  return {turn,o:{"pict.status":"ready","pict.order":order,"pict.idx":idx,"pict.drawer":order[idx],"pict.w":seal(pk.w),"pict.turn":turn,"pict.readyAt":Date.now(),"pict.passes":0,pictUsed:pk.used}}}
+function nextDrawerPlan(p){const base=p.order||[],order=base.concat(inGame("pict").filter(id=>!base.includes(id)));
+  for(let i=(p.idx==null?-1:p.idx)+1;i<order.length;i++){const id=order[i];if(S.main.players[id]&&!isOut(id,"pict"))return readyFields(order,i)}
+  return {turn:null,o:{"pict.status":"done","pict.doneAt":Date.now(),"pict.order":order}}}
+function writeTurn(plan){return guarded(sigP,plan.o,plan.turn?t=>t.set(PARTY.collection("draw").doc("live"),{turn:plan.turn,s:[]}):null)}
+function startPict(){if(pictActive())return;const ps=shuffle(inGame("pict"));if(ps.length<3){toast("Need at least 3 players in Pictionary");return}
+  const r=readyFields(ps,0),o={pict:{status:"ready",game:(PI().game||0)+1,order:ps,idx:0,drawer:ps[0],w:r.o["pict.w"],turn:r.turn,readyAt:Date.now(),passes:0,results:{},last:null},pictUsed:r.o.pictUsed};
+  return writeTurn({turn:r.turn,o})}
+function turnStrokes(p){if(iDraw(p)&&ui.pturn===p.turn)return ui.strokes||[];return S.draw&&S.draw.turn===p.turn?S.draw.s||[]:[]}
+function phoneOk(p){return S.pg.filter(g=>g.turn===p.turn&&g.ok&&g.id!==p.drawer&&S.main.players[g.id]).sort((a,b)=>a.okAt-b.okAt).map(g=>g.id)}
+function finishPlan(p,verbal,failed){
+  const okList=failed?[]:phoneOk(p).concat((verbal||[]).filter(id=>id!==p.drawer&&S.main.players[id])).filter((id,i,a)=>a.indexOf(id)===i);
+  const word=showWord(unseal(p.w,"")),o={"pict.status":"reveal","pict.revealAt":Date.now(),"pict.last":{word,drawer:p.drawer,correct:okList}},add={};
+  okList.forEach((id,i)=>add[id]=(add[id]||0)+(i===0?3:i===1?2:1));if(okList.length)add[p.drawer]=(add[p.drawer]||0)+Math.min(3,okList.length);
+  Object.entries(add).forEach(([id,n])=>{o["points."+id]=FV.increment(n);o["pict.results."+id]=FV.increment(n)});
+  const s=turnStrokes(p);return {o,extra:t=>logT(t,{type:"pict",drawer:p.drawer,word,correct:okList,s})}}
+function pictGuessers(p){return inGame("pict").filter(id=>id!==p.drawer)}
+let pticking=false;
+async function alwaysTick(){if(!S.main||pticking||!PARTY)return;pticking=true;try{
+  const p=PI(),now=Date.now();
+  if(p.status==="drawing"){const g=pictGuessers(p),n=S.pg.filter(x=>x.turn===p.turn&&x.ok&&g.includes(x.id)).length;
+    if(g.length&&n>=g.length){const f=finishPlan(p);await guarded(sigP,f.o,f.extra)}}
+  else if(p.status==="reveal"&&now-p.revealAt>7000)await writeTurn(nextDrawerPlan(p));
+  const A=AUTO(),W=S.main.awards;
+  if(!W){if(dueClock(A.awardsAt)&&recentActivity()&&ids().length>=2)await awardsWrite()}
+  else if(!W.done&&now-(W.stepAt||W.nonce)>10000){const last=W.step>=W.list.length-1;await guarded(sigW,last?{"awards.done":true}:{"awards.step":W.step+1,"awards.stepAt":now})}
+}finally{pticking=false}}
+function pictGo(){const p=PI();if(p.status!=="ready"||!iDraw(p))return;ui.strokes=[];ui.pturn=p.turn;ui.got=[];guarded(sigP,{"pict.status":"drawing","pict.startedAt":Date.now()})}
+function pictPass(){const p=PI();if(p.status!=="drawing"||!iDraw(p))return;const pk=pickWord();ui.strokes=[];pushStrokes(true);paintCanvases();
+  guarded(sigP,{"pict.w":seal(pk.w),"pict.passes":(p.passes||0)+1,pictUsed:pk.used})}
+function pictDone(failed){const p=PI();if(p.status!=="drawing"||!iDraw(p))return;pushStrokes(true);const f=finishPlan(p,ui.got,failed);ui.got=[];guarded(sigP,f.o,f.extra)}
+function pictSkip(){const p=PI();if(p.status==="ready")writeTurn(nextDrawerPlan(p))}
+function pictEnd(){if(PI().status==="off"||PI().status==="done")return;guarded(sigP,{"pict.status":"done","pict.doneAt":Date.now()})}
+function submitGuess(text){const p=PI();if(p.status!=="drawing"||p.drawer===ME||isOut(ME,"pict")||!String(text).trim())return;
+  if(S.pg.some(g=>g.id===ME&&g.turn===p.turn&&g.ok))return;
+  const sc=guessScore(text,unseal(p.w,"")),ref=PARTY.collection("pguess").doc(ME),now=Date.now();
+  if(sc<=1){ref.set({turn:p.turn,ok:true,okAt:now,at:now,text:""}).then(()=>{toast("You got it! 🎯");buzz()}).catch(err)}
+  else{ref.set({turn:p.turn,ok:false,text:String(text).trim().slice(0,40),at:now}).catch(err);toast(sc===2?"So close…":"Nope. Keep guessing.")}}
+/* drawing */
+let drawingNow=false;
+function pushStrokes(now){const go=()=>{const p=PI();if(!iDraw(p)||p.status!=="drawing"||ui.pturn!==p.turn)return;PARTY.collection("draw").doc("live").set({turn:p.turn,s:ui.strokes||[]}).catch(()=>{})};
+  if(now){clearTimeout(ui.pushT);ui.pushT=null;go()}else if(!ui.pushT)ui.pushT=setTimeout(()=>{ui.pushT=null;go()},450)}
+function padPt(pad,e){const r=pad.getBoundingClientRect(),cl=(v,a)=>Math.max(0,Math.min(a,Math.round(v)));return [cl((e.clientX-r.left)/r.width*1000,1000),cl((e.clientY-r.top)/r.height*750,750)]}
+function padStart(pad,e){const p=PI();if(p.status!=="drawing"||!iDraw(p))return;if(ui.pturn!==p.turn){ui.pturn=p.turn;ui.strokes=[]}
+  if(JSON.stringify(ui.strokes).length>300000){toast("The canvas is full. Undo or clear.");return}
+  drawingNow=true;ui.pad=pad;try{pad.setPointerCapture(e.pointerId)}catch(_){}
+  const pt=padPt(pad,e);ui.cur={c:ui.pcolor||PCOLORS[0],w:+(ui.psize||7),p:pt.join(",")};ui.last=pt;ui.strokes.push(ui.cur);
+  const x=pad.getContext("2d"),k=pad.width/1000;x.fillStyle=ui.cur.c;x.beginPath();x.arc(pt[0]*k,pt[1]*k,ui.cur.w*k/2,0,7);x.fill();e.preventDefault()}
+function padMove(e){if(!drawingNow||!ui.pad)return;const pt=padPt(ui.pad,e),l=ui.last;if(Math.hypot(pt[0]-l[0],pt[1]-l[1])<4)return;
+  ui.cur.p+=";"+pt.join(",");const x=ui.pad.getContext("2d"),k=ui.pad.width/1000;x.strokeStyle=ui.cur.c;x.lineWidth=ui.cur.w*k;x.lineCap="round";x.lineJoin="round";
+  x.beginPath();x.moveTo(l[0]*k,l[1]*k);x.lineTo(pt[0]*k,pt[1]*k);x.stroke();ui.last=pt;pushStrokes()}
+function padEnd(){if(!drawingNow)return false;drawingNow=false;ui.pad=null;pushStrokes(true);return true}
+/* canvases are kept alive between redraws so the picture never flickers */
+const CV={};
+function strokesFor(src){if(src==="live")return turnStrokes(PI());if(src&&src.indexOf("log:")===0){const L=(S.log||[]).find(x=>x.id===src.slice(4));return L&&L.s||[]}return []}
+function paintOne(cv,strokes){const w=cv.clientWidth||400,dpr=Math.min(2,window.devicePixelRatio||1),W=Math.round(w*dpr),H=Math.round(w*.75*dpr);
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+  const x=cv.getContext("2d");if(!x)return;x.setTransform(1,0,0,1,0,0);x.fillStyle=BOARD_BG;x.fillRect(0,0,W,H);const k=W/1000;x.lineCap="round";x.lineJoin="round";
+  (strokes||[]).forEach(s=>{const pts=String(s.p||"").split(";").filter(Boolean).map(q=>q.split(",").map(Number));if(!pts.length)return;
+    x.strokeStyle=s.c;x.fillStyle=s.c;x.lineWidth=(s.w||7)*k;
+    if(pts.length===1){x.beginPath();x.arc(pts[0][0]*k,pts[0][1]*k,(s.w||7)*k/2,0,7);x.fill();return}
+    x.beginPath();x.moveTo(pts[0][0]*k,pts[0][1]*k);for(let i=1;i<pts.length;i++)x.lineTo(pts[i][0]*k,pts[i][1]*k);x.stroke()})}
+function attachCanvases(){if(!document.querySelectorAll)return;document.querySelectorAll("[data-slot]").forEach(sl=>{const key=sl.dataset.slot;let cv=CV[key];
+  if(!cv){cv=document.createElement("canvas");cv.className="board";CV[key]=cv}cv.dataset.board=key;
+  if(sl.hasAttribute("data-padslot"))cv.setAttribute("data-pad","1");else cv.removeAttribute("data-pad");
+  if(cv.parentNode!==sl){sl.innerHTML="";sl.appendChild(cv)}try{paintOne(cv,strokesFor(key))}catch(e){}})}
+function paintCanvases(){if(!document.querySelectorAll||drawingNow)return;document.querySelectorAll("canvas[data-board]").forEach(cv=>{try{paintOne(cv,strokesFor(cv.dataset.board))}catch(e){}})}
+/* views */
+function pictRules(){return `<div class="panel stack"><b>How it works</b><p class="muted" style="margin:0">Take turns drawing on your phone while everyone else guesses on theirs. The drawing shows up live on the TV. There's no clock. Shout your guess or type it on your phone, and the artist marks who got it. Everyone draws once per game.</p><p class="muted" style="margin:0"><b style="color:var(--bone)">Points:</b> first right guess +3, second +2, everyone after +1. The artist gets +1 for each person who gets it, up to 3.</p></div>`}
+function deckSeg(){const d=S.main.pictDeck||"mix";return `<div class="seg">${[["haunted","Haunted"],["mix","Haunted + Dirty"],["dirty","Dirty"]].map(([v,l])=>`<button data-act="pdeck" data-v="${v}" aria-pressed="${d===v}">${l}</button>`).join("")}</div>`}
+function pictTally(p){const r=Object.entries(p.results||{}).filter(([id])=>S.main.players[id]).sort((a,b)=>b[1]-a[1]);
+  return r.length?`<div class="lb">${r.map(([id,v],i)=>`<div class="r ${i===0?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(id))}</span><span class="pts">+${v}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody scored. Tough crowd.</p>`}
+function drawerHtml(p,timer){const col=ui.pcolor||PCOLORS[0],sz=String(ui.psize||7);
+  return `<div class="panel" style="text-align:center;margin-bottom:10px;border-color:var(--ember)"><div class="award">Draw this</div><div style="font-family:var(--f-display);font-size:34px;color:var(--ember);line-height:1.1">${esc(showWord(unseal(p.w,"")))}</div><p class="muted" style="margin:4px 0 0;font-size:13px">No letters or numbers. Don't say it out loud.</p></div>${timer}
+  <div class="board-slot" data-slot="live" data-padslot></div>
+  <div class="tools"><div class="swatches">${PCOLORS.map(c=>`<button class="sw" data-act="pcolor" data-c="${c}" aria-pressed="${col===c}" aria-label="Pen colour" style="background:${c}"></button>`).join("")}</div>
+  <div class="seg"><button data-act="psize" data-s="7" aria-pressed="${sz==="7"}">Thin</button><button data-act="psize" data-s="18" aria-pressed="${sz==="18"}">Thick</button><button data-act="pundo">Undo</button><button data-act="pclear">Clear</button></div></div>
+  ${gotPanel(p)}`}
+function gotPanel(p){const ph=phoneOk(p),got=(ui.got||[]).filter(id=>!ph.includes(id)),order=ph.concat(got),gs=pictGuessers(p);
+  const tag=id=>ph.includes(id)?"📱 "+(order.indexOf(id)+1):got.includes(id)?String(order.indexOf(id)+1):"";
+  return `<div class="panel stack" style="margin-top:12px"><b>Who got it?</b><p class="muted" style="margin:0;font-size:14px">Tap people in the order they shouted it. 📱 means they guessed on their phone.</p>
+  ${gs.length?chips(gs,"pgot",{sel:order,tag}):""}
+  <div class="row"><button class="btn" data-act="pconfirm" ${order.length?"":"disabled"}>${order.length?`Done · ${order.length} got it`:"Pick who got it"}</button><button class="btn red" data-act="pfail">Nobody got it</button></div>
+  <button class="btn ghost" data-act="ppass">New word</button></div>`}
+function vEasel(){const p=PI(),N=inGame("pict").length,ended=hold("pictend","End Pictionary","ghost","Hold 1.3s");
+  if(p.status==="off"||p.status==="done")return `<div class="easel"><h2>Pictionary station</h2>${p.status==="done"&&p.game?`<div class="panel stack" style="margin-bottom:14px"><div class="award">Last game</div>${pictTally(p)}</div>`:""}
+    <p class="muted">Leave this iPad where people can grab it. When it's someone's turn, it calls their name. Everyone else guesses on their phones.</p>
+    <h3>Word deck</h3>${deckSeg()}<div style="height:14px"></div>${hold("pictstart",p.game?"Play again":"Start Pictionary","",N<3?"Need at least 3 players":"Hold 1.3s",N<3)}</div>`;
+  if(p.status==="ready")return `<div class="easel stack" style="text-align:center"><div class="award">Pass the iPad to</div><div class="winner">${esc(nm(p.drawer))}</div>
+    <p class="muted" style="font-size:18px">Everyone else, look away. ${esc(nm(p.drawer))}, tap when you've got it.</p>
+    <button class="btn" data-act="pictgo">I'm ${esc(nm(p.drawer))}. Show my word</button>
+    ${hold("pictskip","Skip "+esc(nm(p.drawer)),"ghost","Hold 1.3s · they're not around")}${ended}</div>`;
+  if(p.status==="drawing"){const timer=`<div class="award" style="margin-bottom:8px">${esc(nm(p.drawer))} is drawing · no time limit</div>`;
+    return `<div class="easel">${drawerHtml(p,timer)}<div style="height:16px"></div>${ended}</div>`}
+  const L=p.last||{},nx=nextArtist(p);
+  return `<div class="easel stack" style="text-align:center"><div class="award">It was</div><div class="winner">${esc(L.word||"")}</div><p style="font-size:20px;margin:0">${(L.correct||[]).length?(L.correct||[]).map(id=>esc(nm(id))).join(", ")+" got it":"Nobody got it."}</p>
+    <p class="muted" style="font-size:18px">${nx?"Next up: "+esc(nm(nx))+". Get ready to grab the iPad.":"That was the last drawing."}</p></div>`}
+function vPict(){
+  const p=PI(),N=inGame("pict").length,out=isOut(ME,"pict"),endBtn=`<div style="height:18px"></div>${hold("pictend","End Pictionary","ghost","Hold 1.3s · anyone can")}`;
+  if(p.status==="off"||p.status==="done")return `<h2>Haunted Pictionary</h2>${p.status==="done"&&p.game?`<div class="panel stack" style="margin-bottom:12px"><div class="award">Last game</div>${pictTally(p)}</div>`:""}${pictRules()}
+    <div class="panel" style="margin-top:12px"><p class="muted" style="margin:0;font-size:14px">${easelOn()?"✓ The iPad drawing station is on. Artists draw on the iPad.":"Want everyone to draw on one iPad? Open <span class=\"mono\">"+esc(joinUrl())+"#easel</span> on it."}</p></div>
+    <h3>Word deck</h3>${deckSeg()}<div style="height:14px"></div>${hold("pictstart",p.game?"Play again":"Start Pictionary","",N<3?"Need at least 3 players":"Hold 1.3s · anyone can start it",N<3)}${optRow("pict")}`;
+  const mine=p.drawer===ME;
+  if(p.status==="ready"){
+    if(mine&&easelOn())return `<h2>Your turn to draw</h2><div class="card you"><div class="who">GRAB THE IPAD</div><div class="what">Your word is waiting on the iPad. Tap “Show my word” on it when you've got it.</div></div>${endBtn}`;
+    if(mine)return `<h2>Your turn to draw</h2><div class="card you"><div class="who">YOU'RE UP</div><div class="what">Hide your screen, then tap below to see your word. There's no clock.</div></div><div style="height:12px"></div><button class="btn" data-act="pictgo">Show my word &amp; start</button>${endBtn}`;
+    return `<h2>Haunted Pictionary</h2><div class="card"><div class="award" style="text-align:left">Next artist</div><div class="who">${esc(nm(p.drawer))}</div><div class="what muted">Waiting for them to start…</div></div><div style="height:12px"></div>${hold("pictskip","Skip "+esc(nm(p.drawer)),"ghost","Hold 1.3s · they're not around")}${optRow("pict")}${endBtn}`;
+  }
+  if(p.status==="drawing"){
+    const timer=`<div class="award" style="margin-bottom:8px">${mine?"You're drawing · no time limit":esc(nm(p.drawer))+" is drawing"}</div>`;
+    if(mine&&!iDraw(p))return `<h2>You're drawing</h2><div class="card you"><div class="who">ON THE IPAD</div><div class="what">Your word is on the iPad. Go, go, go.</div></div>${endBtn}`;
+    if(mine)return drawerHtml(p,timer)+endBtn;
+    const ok=S.pg.some(g=>g.id===ME&&g.turn===p.turn&&g.ok);
+    return `<h2>Guess it</h2>${timer}<div class="board-slot" data-slot="live"></div><div style="height:12px"></div>
+    ${out?`<div class="panel"><p class="muted" style="margin:0">You're sitting out. Enjoy the show on the TV.</p></div>`:ok?`<div class="panel" style="text-align:center;border-color:var(--moss)"><div style="font-size:40px">🎯</div><b>You got it!</b><p class="muted" style="margin:0">Keep it to yourself.</p></div>`
+      :`<p class="muted" style="margin:0 0 8px;font-size:14px">Shout it out, or type it here.</p><form class="add" id="guessf"><input id="guessin" placeholder="Type your guess" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40"><button class="btn" type="submit">Guess</button></form>`}
+    ${optRow("pict")}${endBtn}`;
+  }
+  const L=p.last||{};
+  return `<h2>Round over</h2><div class="card"><div class="award" style="text-align:left">${esc(nm(L.drawer))} was drawing</div><div class="who">${esc(L.word||"")}</div><div class="what">${(L.correct||[]).length?(L.correct||[]).map(id=>esc(nm(id))).join(", ")+" got it":"Nobody got it."}</div></div><p class="muted" style="margin-top:10px">Next artist in a few seconds…</p>${endBtn}`;
+}
+function vTVPict(){const p=PI();
+  const feed=S.pg.filter(g=>g.turn===p.turn&&S.main.players[g.id]).sort((a,b)=>(b.okAt||b.at)-(a.okAt||a.at)).slice(0,7)
+    .map(g=>g.ok?`<div class="gf ok">✓ ${esc(nm(g.id))} got it!</div>`:`<div class="gf">${esc(nm(g.id))}: <span>${esc(g.text)}</span></div>`).join("");
+  let top,side;
+  if(p.status==="ready"){top=`<div class="award">Next artist</div><div class="who">${esc(nm(p.drawer))}</div>`;side=`<div class="stat">${esc(nm(p.drawer))}, ${easelOn()?"grab the iPad":"check your phone"}. Everyone else, get ready to guess on yours.</div>`}
+  else if(p.status==="drawing"){const g=pictGuessers(p),n=S.pg.filter(x=>x.turn===p.turn&&x.ok&&g.includes(x.id)).length;
+    top=`<div class="award">${esc(nm(p.drawer))} is drawing</div>`;side=`<div class="tvtimer" style="font-size:clamp(40px,5vw,90px)">Shout it out!</div><div class="stat">or guess on your phone · <b>${n}</b>got it so far</div><div class="feed">${feed}</div>`}
+  else if(p.status==="reveal"){const L=p.last||{};top=`<div class="award">It was</div><div class="who">${esc(L.word||"")}</div>`;side=`<div class="stat">${(L.correct||[]).length?(L.correct||[]).map(id=>esc(nm(id))).join(", ")+" got it":"Nobody got it. Brutal."}</div>`}
+  else{top=`<div class="award">Pictionary · final scores</div>`;side=`<div class="panel">${pictTally(p)}</div>`}
+  return `<div class="tv tvp"><div class="stack" style="min-width:0"><div class="brand">Haunted Pictionary<small>Game ${p.game||1}</small></div>${top}<div class="board-slot" data-slot="live"></div></div>
+  <div class="stack" style="min-width:0;justify-content:center">${side}<div class="panel">${lbHtml(false,6)}</div></div></div>`}
+
+/* ================= sabotage ================= */
+const SABS={drink:{label:"Drink Curse",cost:2,desc:"They drink twice. The TV announces it."},dare:{label:"Dare Bomb",cost:3,desc:"They get a nasty dare on the big screen, right now."},
+  hex:{label:"Hex",cost:3,desc:"They're stuck with a cursed rule for 10 minutes."},heist:{label:"Point Heist",cost:5,desc:"Steal up to 3 of their points."}};
+const HEXES=["Left hand only for drinks","You can't say anyone's name","Whisper everything you say","End every sentence with “mwahaha”","No pointing. At anything.","You can't say “yes” or “no”","Stay in character as your costume","Toast someone before every sip","Answer every question with a question","Call everyone “darling”"];
+const SAB_CD=8*60000,SAB_SHIELD=5*60000;
+const sabState=()=>Object.assign({last:{},hit:{}},S.main.sab||{});
+function hexOf(id){const h=S.main.players[id]&&S.main.players[id].hex;return h&&h.until>Date.now()?h:null}
+async function doSab(kind,target){const K0=SABS[kind];if(!K0||!target||target===ME||!ME)return;
+  try{const res=await FS.runTransaction(async t=>{const snap=await t.get(PARTY),d=snap.data(),now=Date.now(),sb=Object.assign({last:{},hit:{}},d.sab||{}),pts=d.points||{};
+      const me=d.players[ME],tp=d.players[target];if(!me)return "Join the party first.";
+      if(me.out&&me.out.sab)return "You're sitting out of Sabotage.";
+      if(!tp||(tp.out&&tp.out.sab))return "They're not playing Sabotage.";
+      if((pts[ME]||0)<K0.cost)return "Not enough points.";
+      if(now-(sb.last[ME]||0)<SAB_CD)return "You're still on cooldown.";
+      if(now-(sb.hit[target]||0)<SAB_SHIELD)return "They're shielded right now. Try someone else.";
+      const o={["points."+ME]:FV.increment(-K0.cost),["sab.last."+ME]:now,["sab.hit."+target]:now},extra={},tn=tp.name;let text="";
+      if(kind==="drink")text=`${tn} has been hit with a Drink Curse. Drink twice.`;
+      if(kind==="hex"){const rule=rnd(HEXES);o["players."+target+".hex"]={text:rule,until:now+10*60000};text=`${tn} is hexed for 10 minutes: ${rule}`;extra.rule=rule}
+      if(kind==="heist"){const st=Math.min(3,Math.max(0,pts[target]||0));o["points."+target]=FV.increment(-st);o["points."+ME]=FV.increment(st-K0.cost);
+        text=st?`${st} point${st>1?"s":""} stolen from ${tn}.`:`Someone tried to rob ${tn}. They had nothing.`;extra.stolen=st}
+      if(kind==="dare"){if(tp.out&&tp.out.dares)return "They're not playing Dares.";
+        if(d.pict&&["ready","drawing","reveal"].includes(d.pict.status))return "Wait until Pictionary is over.";
+        const lv=level()==="mild"?"spicy":level(),others=Object.keys(d.players).filter(id=>id!==target),dare=rnd(DARES[lv]).replace(/\{o\}/g,(d.players[rnd(others)]||{}).name||"someone");
+        o.current={type:"dare",pid:target,lvl:lv,text:dare,at:now,sab:true};o["dareCount."+target]=FV.increment(1);text=`${tn} got Dare Bombed.`;extra.text=dare}
+      o.event={type:"sab",kind,target,text,cost:K0.cost,at:now};
+      t.update(PARTY,o);t.set(PARTY.collection("log").doc(),Object.assign({type:"sab",kind,by:ME,target,cost:K0.cost,at:now},extra));return "ok"});
+    if(res==="ok"){toast("Sabotage sent 😈");ui.sabTarget=null;render()}else toast(res)}catch(e){err(e)}}
+function sabPanel(){if(isOut(ME,"sab"))return "";
+  const sb=sabState(),pts=(S.main.points||{})[ME]||0,now=Date.now(),cd=(sb.last[ME]||0)+SAB_CD-now,kind=ui.sabKind||"drink",K0=SABS[kind];
+  const shielded=id=>now-(sb.hit[id]||0)<SAB_SHIELD;
+  const targets=ids().filter(id=>id!==ME&&!isOut(id,"sab")&&!(kind==="dare"&&isOut(id,"dares")));
+  if(ui.sabTarget&&!targets.includes(ui.sabTarget))ui.sabTarget=null;
+  return `<h3>Sabotage</h3><div class="panel stack"><p class="muted" style="margin:0">Spend your points to ruin someone's night. It's anonymous until the morning-after recap. You have <b style="color:var(--bone)">${pts} point${pts===1?"":"s"}</b>.</p>
+  <div class="sabs">${Object.entries(SABS).map(([k,v])=>`<button class="chip" data-act="sabkind" data-k="${k}" aria-pressed="${kind===k}"><span>${v.label}<small class="muted" style="display:block;font-weight:400;font-size:12px">${v.desc}</small></span><span class="tag" style="color:var(--ember)">${v.cost}</span></button>`).join("")}</div>
+  ${cd>0?`<p class="muted" style="margin:0">You can sabotage again in about ${Math.ceil(cd/60000)} min.</p>`
+   :`<b>Pick your target</b>${targets.length?chips(targets,"sabtarget",{sel:ui.sabTarget,tag:id=>shielded(id)?"🛡":""}):`<p class="muted" style="margin:0">Nobody to target right now.</p>`}
+  ${hold("sabgo",`${K0.label}${ui.sabTarget?" → "+esc(nm(ui.sabTarget)):""}`,"red",pts<K0.cost?`You need ${K0.cost} points`:!ui.sabTarget?"Pick a target first":shielded(ui.sabTarget)?"They're shielded for a few minutes":`Hold 1.3s · costs ${K0.cost} points`,pts<K0.cost||!ui.sabTarget||shielded(ui.sabTarget))}`}</div>`}
+
+/* ================= party awards ================= */
+const sigW=d=>d.awards?d.awards.step+":"+d.awards.nonce+":"+d.awards.done:"none";
+function computeAwards(){const L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),alive=id=>!!S.main.players[id],cnt={};
+  const bump=(k,id,n=1)=>{if(!alive(id)||!n)return;(cnt[k]=cnt[k]||{})[id]=(cnt[k][id]||0)+n};let first=null;
+  L.forEach(e=>{
+    if(e.type==="dare")bump(e.res==="did"?"did":"chicken",e.pid);
+    if(e.type==="dared")bump("dared",e.pid);
+    if(e.type==="sab"){bump("sabby",e.by,e.cost||0);bump("sabbed",e.target);if(e.kind==="dare")bump("dared",e.target)}
+    if(e.type==="death"&&!first&&alive(e.pid))first=e;
+    if(e.type==="hot")(e.win||[]).forEach(id=>bump("hot",id));
+    if(e.type==="killer"){(e.killers||[]).forEach(id=>bump("bodies",id,e.bodies||0));Object.entries(e.tally||{}).forEach(([id,v])=>{if(!(e.killers||[]).includes(id))bump("accused",id,v)})}
+    if(e.type==="pict"){(e.correct||[]).forEach(id=>bump("psychic",id));bump("picasso",e.drawer,(e.correct||[]).length)}});
+  const top=(k,min=1)=>{const c=cnt[k]||{},m=Math.max(0,...Object.values(c));return m>=min?{ids:Object.keys(c).filter(id=>c[id]===m),n:m}:null};
+  const out=[],add=(label,r,detail)=>{if(r)out.push({label,ids:r.ids,detail:detail(r.n)})},s=n=>n===1?"":"s";
+  if(first)out.push({label:"First Blood",ids:[first.pid],detail:"First to die, at "+clock(first.at)});
+  add("Chicken of the Night",top("chicken"),n=>`Chickened out of ${n} dare${s(n)}`);
+  add("Dare Devil",top("did"),n=>`Finished ${n} dare${s(n)}`);
+  add("Dare Magnet",top("dared",2),n=>`Dared ${n} times`);
+  add("Hot Seat Magnet",top("hot"),n=>`Named “most likely” ${n} time${s(n)}`);
+  add("Most Accused Innocent",top("accused",2),n=>`${n} accusations. Totally innocent.`);
+  add("Serial Killer",top("bodies"),n=>`${n} bod${n===1?"y":"ies"} as the killer`);
+  add("Master Saboteur",top("sabby"),n=>`Spent ${n} point${s(n)} ruining lives`);
+  add("Most Hated",top("sabbed"),n=>`Sabotaged ${n} time${s(n)}`);
+  add("Psychic",top("psychic"),n=>`Guessed ${n} drawing${s(n)}`);
+  add("Filthy Picasso",top("picasso"),n=>`${n} correct guess${n===1?"":"es"} on their drawings`);
+  const pts=S.main.points||{},pm=Math.max(0,...ids().map(id=>pts[id]||0));
+  if(pm>0)out.push({label:"Party MVP",ids:ids().filter(id=>(pts[id]||0)===pm),detail:`${pm} points`,mvp:true});
+  return out}
+function awardsWrite(){if(S.main.awards)return Promise.resolve(false);const list=computeAwards();if(!list.length){toast("Nothing to award yet. Play some games first.");return Promise.resolve(false)}
+  const now=Date.now();return guarded(d=>d.awards?"x":"none",{awards:{list,step:0,nonce:now,stepAt:now,done:false}},t=>logT(t,{type:"awards",list}))}
+function fAwards(){const W=S.main.awards,a=W.list[W.step];if(!a)return"";const key="A"+W.step+":"+W.nonce,showing=ui.revealShown===key,last=W.step>=W.list.length-1;
+  const body=!showing?`<div class="award">Party awards · ${W.step+1} of ${W.list.length}</div><div class="award" style="font-size:clamp(16px,2.4vw,34px);color:var(--bone);letter-spacing:.06em">${a.mvp?"And your Party MVP is…":"The "+esc(a.label)+" award goes to…"}</div><div class="count" id="cd">3</div>`
+    :`<div class="award">${esc(a.label)}</div><div class="winner">${a.ids.map(id=>esc(nm(id))).join(" & ")}</div><div class="runners" style="font-size:clamp(14px,1.8vw,28px)">${esc(a.detail)}</div>`;
+  const ctl=IS_HOST&&MODE==="phone"&&showing?`<button class="btn" data-act="${last?"awdone":"awnext"}">${last?"Finish":"Next award"}</button>`:"";
+  return `<div class="inner">${body}${ctl}</div>`}
+
+/* ================= morning after ================= */
+function vRecap(){const m=S.main,L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),aw=m.awards?m.awards.list:computeAwards(),R=m.reveal,nmL=id=>esc(nm(id));
+  const pics=L.filter(e=>e.type==="pict"&&(e.s||[]).length),kills=L.filter(e=>e.type==="killer");
+  const verb={drink:"Drink Curse",dare:"Dare Bomb",hex:"hex",heist:"rob"};
+  const tl=L.map(e=>{let x="";
+    if(e.type==="death")x=`☠ ${nmL(e.pid)} was killed`;
+    else if(e.type==="killer")x=`🔪 ${(e.killers||[]).map(nmL).join(" & ")} unmasked as the killer${e.caught?" and caught":", and got away with it"} · ${e.bodies} bod${e.bodies===1?"y":"ies"}`;
+    else if(e.type==="dare")x=e.res==="did"?`🃏 ${nmL(e.pid)} did it: “${esc(e.text||"")}”`:`🐔 ${nmL(e.pid)} chickened out of “${esc(e.text||"")}”`;
+    else if(e.type==="hot")x=`🔥 ${(e.win||[]).map(nmL).join(" & ")}: most likely to ${esc(e.q||"")}`;
+    else if(e.type==="sab")x=`😈 ${nmL(e.by)} paid ${e.cost} pts to ${verb[e.kind]||"sabotage"} ${nmL(e.target)}${e.kind==="hex"&&e.rule?` (“${esc(e.rule)}”)`:""}${e.kind==="heist"?` and got ${e.stolen||0}`:""}${e.kind==="dare"&&e.text?`: “${esc(e.text)}”`:""}`;
+    else if(e.type==="pict")x=`🎨 ${nmL(e.drawer)} drew “${esc(e.word)}” · ${(e.correct||[]).length} got it`;
+    else if(e.type==="costume")x=`👑 Costume winners crowned`;
+    else if(e.type==="awards")x=`🏆 Party awards handed out`;
+    return x?`<div class="r"><span class="n">${clock(e.at)}</span><span class="nm" style="font-weight:400">${x}</span><span></span></div>`:""}).join("");
+  const date=new Date(m.created||Date.now()).toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+  return `<div class="recap"><h2 style="font-size:46px">The Morning After</h2><p class="muted">${esc(date)} · ${ids().length} guests</p>
+  ${aw.length?`<h3>Party awards${m.awards?"":" (so far)"}</h3><div class="panel"><div class="lb">${aw.map(a=>`<div class="r"><span class="n">🏆</span><span class="nm">${esc(a.label)}<small>${a.ids.map(nmL).join(" & ")} · ${esc(a.detail)}</small></span><span></span></div>`).join("")}</div></div>`:""}
+  ${R&&R.results?`<h3>Costume winners</h3><div class="panel"><div class="lb">${R.results.slice().reverse().map(r=>`<div class="r"><span class="n">👑</span><span class="nm">${esc(r.label)}<small>${r.win.map(nmL).join(" & ")||"No votes"}</small></span><span></span></div>`).join("")}</div></div>`:""}
+  <h3>Final standings</h3><div class="panel">${ids().length?lbHtml(false):`<p class="muted" style="margin:0">No guests yet.</p>`}</div>
+  ${pics.length?`<h3>The gallery</h3><div class="gallery">${pics.map(e=>`<figure><div class="board-slot" data-slot="log:${e.id}"></div><figcaption><b>${esc(e.word)}</b> by ${nmL(e.drawer)}<span class="muted"> · ${(e.correct||[]).length} got it</span></figcaption></figure>`).join("")}</div>`:""}
+  ${kills.length?`<h3>Killer rounds</h3><div class="panel"><div class="lb">${kills.map((e,i)=>`<div class="r"><span class="n">${i+1}</span><span class="nm">${(e.killers||[]).map(nmL).join(" & ")}<small>${e.caught?"Caught":"Got away with it"} · ${e.bodies} bod${e.bodies===1?"y":"ies"}</small></span><span></span></div>`).join("")}</div></div>`:""}
+  ${tl?`<h3>How the night went</h3><div class="panel"><div class="lb tl">${tl}</div></div>`:""}
+  <p class="muted" style="margin-top:20px;font-size:14px">This page stays up until November 23. Screenshot your favourites.</p></div>`}
+
 
 /* ================= actions ================= */
 const holdActs={
   reveal:hostReveal,assign:hostAssign,unmask:hostUnmask,
   accuse:()=>guarded(sigK,{"killer.status":"accusing","killer.at":Date.now()}),
   killreset:hostAssign,
-  die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>toast("Rest in pieces. Take a drink."))},
-  resetgames:()=>hostReset(true),wipe:()=>hostReset(false)
+  die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>{addLog({type:"death",pid:ME,round:K().round});toast("Rest in pieces. Take a drink.")})},
+  resetgames:()=>hostReset(true),wipe:()=>hostReset(false),
+  pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,
+  sabgo:()=>doSab(ui.sabKind||"drink",ui.sabTarget),
+  awnow:awardsWrite,
+  awreplay:()=>up({"awards.step":0,"awards.done":false,"awards.nonce":Date.now(),"awards.stepAt":Date.now()})
 };
 const acts={
   tab(el){ui.tab=el.dataset.tab;ui.flow=null;ui.draft={};ui.accPick=null;render();scrollTo(0,0)},
@@ -577,36 +901,50 @@ const acts={
   hotpick(el){const c=S.main.current;if(!c||c.type!=="hot"||c.win||isOut(ME,"hot"))return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
   lvl(el){up({dareLevel:el.dataset.l})},
   draw:hostDraw,
-  daredone(){const c=S.main.current;up({["points."+c.pid]:FV.increment(1)}).then(()=>{toast(nm(c.pid)+" +1");hostDraw()})},
-  darechicken(){toast(nm(S.main.current.pid)+" drinks twice 🍺");hostDraw()},
+  daredone(){const c=S.main.current;if(!c.done)addLog({type:"dare",pid:c.pid,res:"did",text:c.text});up({["points."+c.pid]:FV.increment(c.done?0:1)}).then(()=>{toast(nm(c.pid)+" +1");hostDraw()})},
+  darechicken(){const c=S.main.current;if(!c.done)addLog({type:"dare",pid:c.pid,res:"chicken",text:c.text});toast(nm(c.pid)+" drinks twice 🍺");hostDraw()},
   hotnew:hostHot,hotreveal:hostHotReveal,
   clearcur(){up({current:null})},
-  selfdid(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"did",["points."+ME]:FV.increment(1)}).then(ok=>ok&&toast("+1 for you"))},
-  selfchicken(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"chicken"}).then(ok=>ok&&toast("Drink twice 🍺"))},
-  skipnext(){const o=planNext();if(!o){toast("Not enough players in Dares or Hot Seat");return}guarded(sigC,o)},
+  selfdid(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"did",["points."+ME]:FV.increment(1)},t=>logT(t,{type:"dare",pid:ME,res:"did",text:c.text})).then(ok=>ok&&toast("+1 for you"))},
+  selfchicken(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"chicken"},t=>logT(t,{type:"dare",pid:ME,res:"chicken",text:c.text})).then(ok=>ok&&toast("Drink twice 🍺"))},
+  skipnext(){const o=planNext();if(!o){toast("Not enough players in Dares or Hot Seat");return}adv(o)},
   opt(el){const g=el.dataset.g,out=!isOut(ME,g);up({["players."+ME+".out."+g]:out}).then(()=>toast(out?"You're sitting out of "+GAMES[g]:"Welcome back to "+GAMES[g]))},
   editpts(){ui.editPts=!ui.editPts;render()},
+  pictgo:pictGo,ppass:pictPass,pdone:()=>pictDone(false),
+  pgot(el){const id=el.dataset.id,ph=phoneOk(PI());if(ph.includes(id))return;ui.got=ui.got||[];const i=ui.got.indexOf(id);if(i>=0)ui.got.splice(i,1);else ui.got.push(id);render()},
+  pconfirm:()=>pictDone(false),pfail:()=>pictDone(true),
+  pcolor(el){ui.pcolor=el.dataset.c;render()},psize(el){ui.psize=+el.dataset.s;render()},
+  pundo(){if(!ui.strokes||!ui.strokes.length)return;ui.strokes.pop();paintCanvases();pushStrokes(true)},
+  pclear(){ui.strokes=[];paintCanvases();pushStrokes(true)},
+  pdeck(el){if(pictActive())return;up({pictDeck:el.dataset.v})},
+  sabkind(el){ui.sabKind=el.dataset.k;render()},sabtarget(el){ui.sabTarget=el.dataset.id;render()},
+  awnext(){const W=S.main.awards;if(W)up({"awards.step":W.step+1,"awards.stepAt":Date.now()})},
+  awdone(){up({"awards.done":true})},
   pm(el){up({["points."+el.dataset.id]:FV.increment(+el.dataset.n)})},
   kick(el){const id=el.dataset.id;if(ui.kickArm!==id){ui.kickArm=id;el.textContent="Tap again";setTimeout(()=>{if(ui.kickArm===id){ui.kickArm=null;render()}},3000);return}
     ui.kickArm=null;up({["players."+id]:FV.delete(),["points."+id]:FV.delete()});PARTY.collection("ballots").doc(id).delete().catch(()=>{})}
 };
 document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el||el.disabled)return;const f=acts[el.dataset.act];if(f)f(el)});
-document.addEventListener("submit",e=>{if(e.target.id==="joinf"){e.preventDefault();join(document.getElementById("joinname").value)}});
+document.addEventListener("submit",e=>{if(e.target.id==="joinf"){e.preventDefault();join(document.getElementById("joinname").value)}
+  if(e.target.id==="guessf"){e.preventDefault();const i=document.getElementById("guessin");submitGuess(i.value);i.value="";i.focus()}});
 document.addEventListener("change",e=>{const t=e.target;
   if(t.dataset.cat){const cats=S.main.cats.map(c=>c.id===t.dataset.cat?{...c,on:t.checked}:c);up({cats})}
   if(t.id==="kc")up({killerCount:+t.value});
   if(t.id==="au-on")up({"auto.on":t.checked});if(t.id==="au-killer")up({"auto.killer":t.checked});
-  if(t.id==="au-every")up({"auto.every":+t.value});if(t.id==="au-reveal")up({"auto.revealAt":t.value})});
+  if(t.id==="au-every")up({"auto.every":+t.value});if(t.id==="au-awards")up({"auto.awardsAt":t.value});if(t.id==="au-reveal")up({"auto.revealAt":t.value})});
 let holdT=null,holdEl=null,peeking=false,pendingRender=false;
 document.addEventListener("pointerdown",e=>{
+  const pad=e.target.closest&&e.target.closest("[data-pad]");if(pad){padStart(pad,e);return}
   const pk=e.target.closest("[data-peek]");
   if(pk){peeking=true;pk.classList.add("on");pk.querySelector("#peekoff").hidden=true;pk.querySelector("#peekon").hidden=false;try{pk.setPointerCapture(e.pointerId)}catch(_){}
     const k=K();if(!(k.seen||[]).includes(ME))up({"killer.seen":FV.arrayUnion(ME)});return}
   const h=e.target.closest("[data-hold]");if(!h||h.disabled)return;holdEl=h;h.classList.add("holding");
   holdT=setTimeout(()=>{h.classList.remove("holding");holdEl=null;holdT=null;const f=holdActs[h.dataset.hold];if(f)f();if(pendingRender)render()},1300)});
-function endHold(){const was=peeking||!!holdEl;peeking=false;const pk=document.getElementById("peek");if(pk&&pk.classList.contains("on")){pk.classList.remove("on");pk.querySelector("#peekoff").hidden=false;pk.querySelector("#peekon").hidden=true}
+function endHold(){const was=padEnd()||peeking||!!holdEl;peeking=false;const pk=document.getElementById("peek");if(pk&&pk.classList.contains("on")){pk.classList.remove("on");pk.querySelector("#peekoff").hidden=false;pk.querySelector("#peekon").hidden=true}
   if(holdT){clearTimeout(holdT);holdT=null}if(holdEl){holdEl.classList.remove("holding");holdEl=null}if(was&&pendingRender)render()}
 ["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,endHold));
+document.addEventListener("pointermove",padMove);
+window.addEventListener("resize",()=>paintCanvases());
 document.addEventListener("contextmenu",e=>{if(e.target.closest("[data-hold],[data-peek]"))e.preventDefault()});
 document.addEventListener("keydown",e=>{const h=e.target.closest&&e.target.closest("[data-hold]");if(h&&!h.disabled&&(e.key==="Enter"||e.key===" ")){e.preventDefault();const f=holdActs[h.dataset.hold];f&&f()}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)endHold()});
@@ -622,17 +960,21 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v5<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v8<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;
     render()},e=>{console.error(e);S.loaded=true;setup("Can't reach the party database. If you're the host, check the Firestore rules allow reads and writes.")});
   const col=(name,key)=>PARTY.collection(name).onSnapshot(q=>{S[key]=q.docs.map(d=>({id:d.id,...d.data()}));render()},e=>console.error(e));
-  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");
-  if(ME&&MODE!=="tv")PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{});
+  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");col("log","log");col("pguess","pg");
+  PARTY.collection("draw").doc("live").onSnapshot(d=>{S.draw=d.exists?d.data():null;paintCanvases()},()=>{});
+  if(ME&&MODE==="phone")PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{});
+  if(EASEL){const hb=()=>{if(S.main)PARTY.update({easelSeen:Date.now()}).catch(()=>{})};setTimeout(hb,1500);setInterval(hb,30000);try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}}
   if(MODE==="tv"){try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}}
   setInterval(()=>{if(MODE==="tv"||ui.tab==="live")render()},30000);
   setTimeout(()=>setInterval(autoTick,5000),Math.random()*2500);
+  setTimeout(()=>setInterval(alwaysTick,2000),Math.random()*1500);
+  setInterval(()=>{if(!document.querySelectorAll)return;document.querySelectorAll("[data-ends]").forEach(el=>{const s=Math.max(0,Math.ceil((+el.dataset.ends-Date.now())/1000)),t=s>=60?Math.floor(s/60)+":"+String(s%60).padStart(2,"0"):String(s);if(el.textContent!==t)el.textContent=t})},250);
 }
 /* roles listener must follow identity changes */
 const _claim=claim;claim=function(id){_claim(id);if(PARTY&&MODE!=="tv")PARTY.collection("roles").doc(id).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{})};

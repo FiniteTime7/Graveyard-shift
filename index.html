@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#17101a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Graveyard">
 <title>Graveyard Shift</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Mono:wght@400;500&display=swap">
@@ -236,8 +240,8 @@ const defaults=()=>({created:Date.now(),players:{},cats:JSON.parse(JSON.stringif
 /* ================= app state ================= */
 const hash=location.hash.replace(/^#/,"");
 const MODE=hash==="tv"?"tv":"phone";
-if(hash==="host-"+HOST_KEY){ls.set("gs-host-"+PARTY_ID,"1");history.replaceState(null,"",location.pathname+location.search)}
-const IS_HOST=ls.get("gs-host-"+PARTY_ID)==="1"&&MODE!=="tv";
+if(hash==="host-"+HOST_KEY)ls.set("gs-host-"+PARTY_ID,"1");
+const IS_HOST=(hash==="host-"+HOST_KEY||ls.get("gs-host-"+PARTY_ID)==="1")&&MODE!=="tv";
 let ME=ls.get("gs-me-"+PARTY_ID);
 const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null};
 const ui={tab:"live",flow:null,draft:{},accPick:null,editPts:false,revealShown:null,hotUsed:[],used:{mild:[],spicy:[],unhinged:[]}};
@@ -447,25 +451,26 @@ let qrNode=null;
 function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)return;
   if(!qrNode){qrNode=document.createElement("div");try{new QRCode(qrNode,{text:joinUrl(),width:400,height:400,colorDark:"#17101a",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M})}catch(e){}}
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
+function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v2</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v3</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
   if(!S.main){
     tabs.hidden=true;
-    main.innerHTML=IS_HOST?`<div class="panel stack"><h2>Open the party</h2><p class="muted">This creates the party so guests can join.</p><button class="btn" data-act="create">Open the crypt</button></div>`
-      :`<div class="panel stack"><h2>Not open yet</h2><p class="muted">The host hasn't opened the party. Try again in a bit.</p></div>`;
-    layer.innerHTML="";return;
+    put(main,IS_HOST?`<div class="panel stack"><h2>Open the party</h2><p class="muted">This creates the party so guests can join.</p><button class="btn" data-act="create">Open the crypt</button></div>`
+      :`<div class="panel stack"><h2>Not open yet</h2><p class="muted">The host hasn't opened the party. Try again in a bit.</p></div>`);
+    put(layer,"");return;
   }
-  if(MODE==="tv"){document.body.classList.add("tvmode");document.getElementById("tvroot").innerHTML=vTV();renderOverlay();drawQR();return}
+  if(MODE==="tv"){document.body.classList.add("tvmode");put(document.getElementById("tvroot"),vTV());renderOverlay();drawQR();return}
   const meName=ME&&S.main.players[ME]?S.main.players[ME].name:null;
   document.getElementById("me").innerHTML=meName?`playing as<b>${esc(meName)}</b>${IS_HOST?`<span class="hostpill">HOST</span>`:""}`:(IS_HOST?`<span class="hostpill">HOST</span>`:"");
-  if(!meName&&ui.tab!=="host"){tabs.hidden=!IS_HOST;main.innerHTML=vJoin();renderTabs();renderOverlay();return}
+  if(!meName&&ui.tab!=="host"){tabs.hidden=!IS_HOST;put(main,vJoin());renderTabs();renderOverlay();return}
   tabs.hidden=false;renderTabs();
   const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null;
   const v={live:vLive,vote:vVote,killer:vKiller,board:vBoard,host:vHost}[ui.tab]||vLive;
-  main.innerHTML=meName||ui.tab==="host"?v():vJoin();
+  put(main,meName||ui.tab==="host"?v():vJoin());
   if(keep){const i=document.getElementById(keep);i&&i.focus()}
   renderOverlay();drawQR();
 }
@@ -475,15 +480,15 @@ function renderTabs(){
     ["vote","👑","Costumes",!mine&&!(S.main.reveal)],["killer","🔪","Killer",(k.status==="live"&&S.role&&S.role.round===k.round&&!(k.seen||[]).includes(ME))||(k.status==="accusing"&&!S.acc.some(a=>a.id===ME&&a.round===k.round))],["board","🏆","Board",false]];
   if(IS_HOST)t.push(["host","⚙︎","Host",false]);
   const meIn=ME&&S.main.players[ME];
-  document.getElementById("tabsin").innerHTML=t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"style=\"opacity:.5\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join("");
+  put(document.getElementById("tabsin"),t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"style=\"opacity:.5\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join(""));
 }
 function renderOverlay(){
   const layer=document.getElementById("layer"),R=S.main.reveal;
-  if(R&&!R.done&&R.results&&R.results[R.step]){layer.innerHTML=`<div class="ov">${fReveal()}</div>`;runCountdown();return}
+  if(R&&!R.done&&R.results&&R.results[R.step]){put(layer,`<div class="ov">${fReveal()}</div>`);runCountdown();return}
   const kr=K().result;
   if(MODE==="tv"&&K().status==="revealed"&&kr&&ui.unmaskSeen!==kr.nonce&&Date.now()-kr.nonce<20000){
-    layer.innerHTML=`<div class="ov"><div class="inner">${killerResult(kr)}</div></div>`;clearTimeout(ui.unT);ui.unT=setTimeout(()=>{ui.unmaskSeen=kr.nonce;renderOverlay()},15000);return}
-  layer.innerHTML="";
+    put(layer,`<div class="ov"><div class="inner">${killerResult(kr)}</div></div>`);clearTimeout(ui.unT);ui.unT=setTimeout(()=>{ui.unmaskSeen=kr.nonce;renderOverlay()},15000);return}
+  put(layer,"");
 }
 let cdKey=null;
 function runCountdown(){const R=S.main.reveal,key=R.step+":"+R.nonce;if(ui.revealShown===key||cdKey===key)return;cdKey=key;
@@ -528,15 +533,15 @@ document.addEventListener("submit",e=>{if(e.target.id==="joinf"){e.preventDefaul
 document.addEventListener("change",e=>{const t=e.target;
   if(t.dataset.cat){const cats=S.main.cats.map(c=>c.id===t.dataset.cat?{...c,on:t.checked}:c);up({cats})}
   if(t.id==="kc")up({killerCount:+t.value})});
-let holdT=null,holdEl=null;
+let holdT=null,holdEl=null,peeking=false,pendingRender=false;
 document.addEventListener("pointerdown",e=>{
   const pk=e.target.closest("[data-peek]");
-  if(pk){pk.classList.add("on");pk.querySelector("#peekoff").hidden=true;pk.querySelector("#peekon").hidden=false;try{pk.setPointerCapture(e.pointerId)}catch(_){}
+  if(pk){peeking=true;pk.classList.add("on");pk.querySelector("#peekoff").hidden=true;pk.querySelector("#peekon").hidden=false;try{pk.setPointerCapture(e.pointerId)}catch(_){}
     const k=K();if(!(k.seen||[]).includes(ME))up({"killer.seen":FV.arrayUnion(ME)});return}
   const h=e.target.closest("[data-hold]");if(!h||h.disabled)return;holdEl=h;h.classList.add("holding");
-  holdT=setTimeout(()=>{h.classList.remove("holding");holdEl=null;holdT=null;const f=holdActs[h.dataset.hold];if(f)f()},1300)});
-function endHold(){const pk=document.getElementById("peek");if(pk&&pk.classList.contains("on")){pk.classList.remove("on");pk.querySelector("#peekoff").hidden=false;pk.querySelector("#peekon").hidden=true}
-  if(holdT){clearTimeout(holdT);holdT=null}if(holdEl){holdEl.classList.remove("holding");holdEl=null}}
+  holdT=setTimeout(()=>{h.classList.remove("holding");holdEl=null;holdT=null;const f=holdActs[h.dataset.hold];if(f)f();if(pendingRender)render()},1300)});
+function endHold(){const was=peeking||!!holdEl;peeking=false;const pk=document.getElementById("peek");if(pk&&pk.classList.contains("on")){pk.classList.remove("on");pk.querySelector("#peekoff").hidden=false;pk.querySelector("#peekon").hidden=true}
+  if(holdT){clearTimeout(holdT);holdT=null}if(holdEl){holdEl.classList.remove("holding");holdEl=null}if(was&&pendingRender)render()}
 ["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,endHold));
 document.addEventListener("contextmenu",e=>{if(e.target.closest("[data-hold],[data-peek]"))e.preventDefault()});
 document.addEventListener("keydown",e=>{const h=e.target.closest&&e.target.closest("[data-hold]");if(h&&!h.disabled&&(e.key==="Enter"||e.key===" ")){e.preventDefault();const f=holdActs[h.dataset.hold];f&&f()}});
@@ -553,7 +558,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v2<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v3<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

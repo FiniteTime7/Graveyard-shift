@@ -167,6 +167,9 @@ body.easelmode .app{padding-bottom:24px}
 .easel .seg button{padding:10px 16px;font-size:16px}
 body.easelmode{overscroll-behavior:none}
 button{touch-action:manipulation}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,.mono,.recap{-webkit-user-select:text;user-select:text}
+.board-slot,.board-slot *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -555,7 +558,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v8</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v9</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -685,7 +688,7 @@ function pushStrokes(now){const go=()=>{const p=PI();if(!iDraw(p)||p.status!=="d
 function padPt(pad,e){const r=pad.getBoundingClientRect(),cl=(v,a)=>Math.max(0,Math.min(a,Math.round(v)));return [cl((e.clientX-r.left)/r.width*1000,1000),cl((e.clientY-r.top)/r.height*750,750)]}
 function padStart(pad,e){const p=PI();if(p.status!=="drawing"||!iDraw(p))return;if(ui.pturn!==p.turn){ui.pturn=p.turn;ui.strokes=[]}
   if(JSON.stringify(ui.strokes).length>300000){toast("The canvas is full. Undo or clear.");return}
-  drawingNow=true;ui.pad=pad;try{pad.setPointerCapture(e.pointerId)}catch(_){}
+  drawingNow=true;ui.pad=pad;try{const sel=window.getSelection();sel&&sel.removeAllRanges()}catch(_){}try{pad.setPointerCapture(e.pointerId)}catch(_){}
   const pt=padPt(pad,e);ui.cur={c:ui.pcolor||PCOLORS[0],w:+(ui.psize||7),p:pt.join(",")};ui.last=pt;ui.strokes.push(ui.cur);
   const x=pad.getContext("2d"),k=pad.width/1000;x.fillStyle=ui.cur.c;x.beginPath();x.arc(pt[0]*k,pt[1]*k,ui.cur.w*k/2,0,7);x.fill();e.preventDefault()}
 function padMove(e){if(!drawingNow||!ui.pad)return;const pt=padPt(ui.pad,e),l=ui.last;if(Math.hypot(pt[0]-l[0],pt[1]-l[1])<4)return;
@@ -944,8 +947,12 @@ function endHold(){const was=padEnd()||peeking||!!holdEl;peeking=false;const pk=
   if(holdT){clearTimeout(holdT);holdT=null}if(holdEl){holdEl.classList.remove("holding");holdEl=null}if(was&&pendingRender)render()}
 ["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,endHold));
 document.addEventListener("pointermove",padMove);
+/* stop iPad/iPhone text selection, magnifier and callout menus while drawing with a finger or Apple Pencil */
+["touchstart","touchmove"].forEach(t=>document.addEventListener(t,e=>{if(e.target.closest&&e.target.closest("[data-pad]"))e.preventDefault()},{passive:false}));
+document.addEventListener("selectstart",e=>{if(drawingNow||(e.target.closest&&e.target.closest(".board-slot")))e.preventDefault()});
+document.addEventListener("selectionchange",()=>{if(drawingNow){try{const s=window.getSelection();if(s&&s.rangeCount)s.removeAllRanges()}catch(_){}}});
 window.addEventListener("resize",()=>paintCanvases());
-document.addEventListener("contextmenu",e=>{if(e.target.closest("[data-hold],[data-peek]"))e.preventDefault()});
+document.addEventListener("contextmenu",e=>{if(e.target.closest("[data-hold],[data-peek],[data-pad],.board-slot"))e.preventDefault()});
 document.addEventListener("keydown",e=>{const h=e.target.closest&&e.target.closest("[data-hold]");if(h&&!h.disabled&&(e.key==="Enter"||e.key===" ")){e.preventDefault();const f=holdActs[h.dataset.hold];f&&f()}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)endHold()});
 
@@ -960,7 +967,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v8<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v9<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

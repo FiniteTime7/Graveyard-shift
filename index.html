@@ -254,8 +254,12 @@ const activeCats=()=>(S.main.cats||[]).filter(c=>c.on);
 const ballotCount=()=>S.ballots.filter(b=>S.main.players[b.id]).length;
 const myBallot=()=>{const b=S.ballots.find(b=>b.id===ME);return b?unseal(b.s,null):null};
 const K=()=>S.main.killer||defaults().killer;
-const accThisRound=()=>S.acc.filter(a=>a.round===K().round&&S.main.players[a.id]);
-const hotThisQ=()=>{const c=S.main.current;return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]):[]};
+const isOut=(id,g)=>!!(S.main.players[id]&&S.main.players[id].out&&S.main.players[id].out[g]);
+const inGame=g=>ids().filter(id=>!isOut(id,g));
+const kPlayers=()=>{const k=K();return (k.players&&k.players.length?k.players:ids()).filter(id=>S.main.players[id])};
+const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer"};
+const accThisRound=()=>{const kp=kPlayers();return S.acc.filter(a=>a.round===K().round&&kp.includes(a.id))};
+const hotThisQ=()=>{const c=S.main.current;return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]&&!isOut(h.id,"hot")&&!isOut(h.pick,"hot")):[]};
 function level(){const L=S.main.dareLevel||"auto";if(L!=="auto")return L;const d=new Date(),h=d.getHours(),t=(h<12?h+24:h)*60+d.getMinutes();return t<23*60+30?"mild":t<25*60?"spicy":"unhinged"}
 
 /* ================= db writes ================= */
@@ -281,11 +285,11 @@ async function hostReveal(){
   return up(o);
 }
 async function hostAssign(){
-  const all=shuffle(ids()),n=Math.min(S.main.killerCount||1,Math.max(1,Math.floor(all.length/3))),killers=all.slice(0,n),ms=shuffle(METHODS),round=(K().round||0)+1;
+  const all=shuffle(inGame("killer"));if(all.length<4){toast("Need at least 4 guests playing Killer");return}const n=Math.min(S.main.killerCount||1,Math.max(1,Math.floor(all.length/3))),killers=all.slice(0,n),ms=shuffle(METHODS),round=(K().round||0)+1;
   const b=FS.batch();
   all.forEach(id=>{const ki=killers.indexOf(id);
     b.set(PARTY.collection("roles").doc(id),{round,s:seal(ki>=0?{k:true,m:ms[ki],partners:killers.filter(x=>x!==id)}:{k:false})})});
-  b.update(PARTY,{killer:{status:"live",round,seen:[],dead:[],result:null}});
+  b.update(PARTY,{killer:{status:"live",round,players:all,seen:[],dead:[],result:null}});
   await b.commit().catch(err);toast("Roles sent. Everyone check your phone.");
 }
 async function hostUnmask(){
@@ -304,7 +308,7 @@ async function hostUnmask(){
 function hostDraw(){
   const lv=level(),pool=DARES[lv];let used=ui.used[lv];if(used.length>=pool.length)used=ui.used[lv]=[];
   const idx=shuffle(pool.map((_,i)=>i).filter(i=>!used.includes(i)))[0];used.push(idx);
-  const all=ids();if(all.length<2){toast("Need at least 2 guests");return}
+  const all=inGame("dares");if(all.length<2){toast("Need at least 2 guests playing Dares");return}
   const dc=S.main.dareCount||{},cur=S.main.current,min=Math.min(...all.map(id=>dc[id]||0));
   const cand=all.filter(id=>(dc[id]||0)===min&&!(cur&&cur.pid===id));
   const pid=rnd(cand.length?cand:all),o=rnd(all.filter(id=>id!==pid));
@@ -329,6 +333,7 @@ const hold=(act,label,cls="",hint="Hold to confirm",dis=false)=>`<button class="
 function chips(list,act,{sel,dead=[],tag,extra=""}={}){return `<div class="chips">${list.map(id=>`<button class="chip ${dead.includes(id)?"dead":""}" data-act="${act}" data-id="${id}" ${extra} aria-pressed="${Array.isArray(sel)?sel.includes(id):sel===id}"><span>${esc(nm(id))}</span>${tag&&tag(id)?`<span class="tag">${tag(id)}</span>`:""}</button>`).join("")}</div>`}
 function meter(n,N,label){return `<div class="panel stack"><div class="meter"><span class="big">${n}</span><span class="muted">of ${N} ${label}</span></div><div class="bar"><i style="width:${N?Math.min(100,n/N*100):0}%"></i></div></div>`}
 const hostBox=(inner)=>IS_HOST?`<div class="panel host stack" style="margin-top:18px"><div class="award">Host controls</div>${inner}</div>`:"";
+function optRow(g,note=""){const out=isOut(ME,g);return `<div class="panel" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="min-width:0"><b>${GAMES[g]}</b><span class="muted" style="display:block;font-size:14px">${out?"You're sitting out.":"You're in."}${note?" "+note:""}</span></span><button class="btn ${out?"":"ghost"}" style="width:auto;flex:0 0 auto;padding:10px 14px;font-size:15px" data-act="opt" data-g="${g}">${out?"Jump back in":"Sit out"}</button></div>`}
 function joinUrl(){return location.origin+location.pathname}
 
 /* ================= views ================= */
@@ -367,41 +372,42 @@ function killerResult(R){return `<div class="panel stack" style="text-align:cent
   <div class="runners">Most accused: ${R.top.map(id=>esc(nm(id))).join(" & ")||"nobody"}</div>
   <div class="runners">Guessed right (+3): ${R.right.map(id=>esc(nm(id))).join(", ")||"nobody"}</div></div>`}
 function vKiller(){
-  const k=K(),all=ids(),dead=(k.dead||[]).map(d=>d.id),N=all.length;
+  const k=K(),dead=(k.dead||[]).map(d=>d.id),all=k.status==="off"?inGame("killer"):kPlayers(),N=all.length,inRound=all.includes(ME),kNote=k.status!=="off"&&k.status!=="revealed"?"Changes start next round.":"";
   const rules=`<div class="panel stack"><b>How it works</b>
   <p class="muted" style="margin:0">Your phone secretly tells you if you're a killer. ${(S.main.killerCount||1)>1?"There are two killers, and they know each other.":"There's one killer."} Killers get a secret method, like getting you to clink glasses. When a killer pulls it off, they whisper “you're dead.” Report it here, take a drink, and keep partying as a ghost. Later, everyone votes on who did it.</p>
   <p class="muted" style="margin:0"><b style="color:var(--bone)">Points:</b> killers +2 per body. Guess right +3. A killer who isn't caught +5.</p></div>`;
-  if(k.status==="off")return `<h2>Who's the Killer?</h2>${rules}${IS_HOST?hostBox(`<label class="toggle" for="kc" style="border:none;padding:0"><span>Number of killers</span><select id="kc"><option value="1" ${S.main.killerCount==1?"selected":""}>1</option><option value="2" ${S.main.killerCount==2?"selected":""}>2</option></select></label>${hold("assign","Assign secret roles","red",N<4?"Need at least 4 guests":"Hold 1.3s · sends a role to every phone",N<4)}`):`<div class="panel" style="margin-top:12px"><p class="muted" style="margin:0">Waiting for the host to start the game.</p></div>`}`;
+  if(k.status==="off")return `<h2>Who's the Killer?</h2>${rules}${IS_HOST?hostBox(`<label class="toggle" for="kc" style="border:none;padding:0"><span>Number of killers</span><select id="kc"><option value="1" ${S.main.killerCount==1?"selected":""}>1</option><option value="2" ${S.main.killerCount==2?"selected":""}>2</option></select></label>${hold("assign","Assign secret roles","red",N<4?"Need at least 4 guests playing":"Hold 1.3s · sends a role to "+N+" phones",N<4)}`):`<div class="panel" style="margin-top:12px"><p class="muted" style="margin:0">Waiting for the host to start the game.</p></div>`}${optRow("killer")}`;
   const role=S.role&&S.role.round===k.round?unseal(S.role.s,null):null,iDead=dead.includes(ME);
   const graveyard=`<h3>Graveyard (${dead.length})</h3><div class="panel">${dead.length?`<div class="lb">${k.dead.map((d,i)=>`<div class="r"><span class="n">${i+1}</span><span class="nm">${esc(nm(d.id))}</span><span class="pts muted" style="font-size:13px">${new Date(d.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">No bodies yet. Stay alert.</p>`}</div>`;
   if(k.status==="live"){
     const peek=role?`<div class="peekbox" id="peek" data-peek="1"><div id="peekoff"><div style="font-size:44px">👁</div><b>Press and hold to see your role</b><p class="muted" style="margin:0">Let go to hide it. Shield your screen.</p></div>
       <div id="peekon" hidden>${role.k?`<div class="role" style="color:var(--blood)">KILLER</div><p style="font-size:19px;font-weight:600;margin:0">${esc(role.m)}</p><p class="muted" style="margin:0">Then whisper “you're dead.”${role.partners&&role.partners.length?` Your partner: <b style="color:var(--bone)">${esc(role.partners.map(nm).join(", "))}</b>.`:""}</p>`
       :`<div class="role" style="color:var(--moss)">INNOCENT</div><p class="muted" style="margin:0">Survive. Watch for strange requests. Sniff out the killer.</p>`}</div></div>`
-      :`<div class="panel"><p class="muted" style="margin:0">You joined after roles went out, so you're innocent this round. Stay alive anyway.</p></div>`;
+      :`<div class="panel"><p class="muted" style="margin:0">${isOut(ME,"killer")?"You're sitting out of Killer. Nobody can kill you, and you won't be a suspect.":"You joined after roles went out, so you're sitting this round out."}</p></div>`;
     return `<h2>Someone here is lying</h2>${peek}
-    <div style="height:14px"></div>${iDead?`<div class="panel" style="text-align:center"><div style="font-size:40px">☠</div><b>You're dead.</b><p class="muted" style="margin:0">Haunt the party. You still get to vote at the end.</p></div>`
+    <div style="height:14px"></div>${!role?"":iDead?`<div class="panel" style="text-align:center"><div style="font-size:40px">☠</div><b>You're dead.</b><p class="muted" style="margin:0">Haunt the party. You still get to vote at the end.</p></div>`
       :hold("die","☠ I've been killed","red","Hold 1.3s · don't say who did it")}
-    ${graveyard}<div style="height:14px"></div>${rules}
+    ${graveyard}<div style="height:14px"></div>${rules}${optRow("killer",kNote)}
     ${hostBox(`<p class="muted" style="margin:0">${(k.seen||[]).length} of ${N} have peeked at their role.</p>${hold("accuse","Start the accusation vote","","Hold 1.3s · every phone gets a ballot")}`)}`;
   }
   if(k.status==="accusing"){
     const mine=S.acc.find(a=>a.id===ME&&a.round===k.round),others=all.filter(id=>id!==ME),n=accThisRound().length;
+    if(!inRound)return `<h2>Point the finger</h2><div class="panel"><p class="muted" style="margin:0">You're not in this round, so you're watching this vote from the sidelines.</p></div>${meter(n,N,"accusations in")}${graveyard}${optRow("killer",kNote)}${hostBox(hold("unmask","Unmask the killer","red",n<2?"Need at least 2 votes":"Hold 1.3s · shows on every screen",n<2))}`;
     return `<h2>Point the finger</h2><p class="muted">Dead or alive, vote for who you think the killer is. Your vote stays secret.</p>${meter(n,N,"accusations in")}
     <h3>${mine?"You accused "+esc(nm(mine.pick))+". Change it?":"Who did it?"}</h3>${chips(others,"pickacc",{sel:ui.accPick||(mine&&mine.pick),dead})}
     <div style="height:12px"></div><button class="btn red" data-act="sealacc" ${(ui.accPick&&(!mine||ui.accPick!==mine.pick))?"":"disabled"}>${mine?"Change my accusation":"Seal my accusation"}</button>
-    ${graveyard}${hostBox(hold("unmask","Unmask the killer","red",n<2?"Need at least 2 votes":"Hold 1.3s · shows on every screen",n<2))}`;
+    ${graveyard}${optRow("killer",kNote)}${hostBox(hold("unmask","Unmask the killer","red",n<2?"Need at least 2 votes":"Hold 1.3s · shows on every screen",n<2))}`;
   }
-  return `<h2>Unmasked</h2>${k.result?killerResult(k.result):""}${graveyard}${hostBox(hold("killreset","New round of Killer","ghost","Hold 1.3s · new secret roles"))}`;
+  return `<h2>Unmasked</h2>${k.result?killerResult(k.result):""}${graveyard}${optRow("killer")}${hostBox(hold("killreset","New round of Killer","ghost","Hold 1.3s · new secret roles"))}`;
 }
 function vLive(){
   const c=S.main.current,lv=level();let card;
   if(!c)card=`<div class="card"><div class="award" style="text-align:left">Nothing happening… yet</div><div class="what muted">Dares and Hot Seat questions show up here. Keep your phone handy.</div></div>`;
   else if(c.type==="dare")card=`<div class="card ${c.pid===ME?"you":""}"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${c.pid===ME?"YOU, "+esc(nm(c.pid)).toUpperCase():esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
-  else{const mine=S.hot.find(h=>h.id===ME&&h.qid===c.qid),n=hotThisQ().length,N=ids().length;
+  else{const mine=S.hot.find(h=>h.id===ME&&h.qid===c.qid),n=hotThisQ().length,N=inGame("hot").length,hOut=isOut(ME,"hot");
     card=`<div class="card"><div class="award" style="text-align:left">Hot seat · who's most likely to…</div><div class="what" style="font-size:26px">${esc(c.q)}?</div>
       ${c.win?`<div class="who">${c.win.length?c.win.map(id=>esc(nm(id))).join(" & "):"Nobody voted"}</div>${c.win.length?`<p style="margin:0">${c.win.includes(ME)?"That's you. Drink up.":"Drink up, and the title is yours."}</p>`:""}<div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="runners">${n} of ${N} voted</div>`}</div>
-      ${c.win?"":`<h3>${mine?"You picked "+esc(nm(mine.pick))+". Tap to change.":"Tap your pick"}</h3>${chips(ids(),"hotpick",{sel:mine&&mine.pick})}`}`}
+      ${c.win||hOut?"":`<h3>${mine&&!isOut(mine.pick,"hot")?"You picked "+esc(nm(mine.pick))+". Tap to change.":"Tap your pick"}</h3>${chips(inGame("hot"),"hotpick",{sel:mine&&mine.pick})}`}`}
   const host=IS_HOST?hostBox(`<div class="seg">${["auto","mild","spicy","unhinged"].map(l=>`<button data-act="lvl" data-l="${l}" aria-pressed="${(S.main.dareLevel||"auto")===l}">${l==="auto"?"Auto ("+LVL[lv]+")":LVL[l]}</button>`).join("")}</div>
     <p class="muted" style="margin:0;font-size:14px">Auto gets nastier through the night: warm-up until 11:30, spicy until 1, then unhinged.</p>
     ${c&&c.type==="dare"?`<div class="row"><button class="btn" data-act="daredone">Did it · +1</button><button class="btn ghost" data-act="darechicken">Chickened out</button></div>`:""}
@@ -409,7 +415,7 @@ function vLive(){
     ${c&&c.type==="hot"&&!c.win?`<button class="btn red" data-act="hotreveal" ${hotThisQ().length?"":"disabled"}>Reveal hot-seat results</button>`:""}
     <button class="btn ${c&&c.type==="hot"&&!c.win?"ghost":""}" data-act="hotnew">${c&&c.type==="hot"?"Next hot-seat question":"Ask a hot-seat question"}</button>
     ${c?`<button class="btn ghost" data-act="clearcur">Clear the screen</button>`:""}`):"";
-  return `<h2>Now playing</h2>${card}${host}`;
+  return `<h2>Now playing</h2>${card}${optRow("dares")}${optRow("hot")}${host}`;
 }
 function ranked(){const pts=S.main.points||{},t=S.main.titles||{};return ids().map(id=>({id,pts:pts[id]||0,t:(t[id]||[]).length})).sort((a,b)=>b.pts-a.pts||nm(a.id).localeCompare(nm(b.id)))}
 function lbHtml(edit){const r=ranked(),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
@@ -418,6 +424,7 @@ function vBoard(){
   const titles=Object.entries(S.main.titles||{}).flatMap(([id,ts])=>(S.main.players[id]?ts:[]).map(t=>({id,t})));
   return `<h2>Leaderboard</h2><p class="muted">Top of the board at the end of the night is Party MVP.</p><div class="panel">${ids().length?lbHtml(ui.editPts):`<p class="muted" style="margin:0">No guests yet.</p>`}</div>
   ${titles.length?`<h3>Hot-seat titles</h3><div class="panel">${titles.slice(-15).reverse().map(x=>`<p style="margin:0 0 6px"><b>${esc(nm(x.id))}</b> <span class="muted">· most likely to ${esc(x.t)}</span></p>`).join("")}</div>`:""}
+  <h3>Your games</h3>${optRow("dares")}${optRow("hot")}${optRow("killer",K().status!=="off"&&K().status!=="revealed"?"Changes start next round.":"")}
   ${hostBox(`<button class="btn ghost" data-act="editpts">${ui.editPts?"Done adjusting":"Adjust points"}</button>`)}`;
 }
 function vHost(){
@@ -426,7 +433,7 @@ function vHost(){
   return `<h2>Host desk</h2>${meIn?"":`<div class="panel stack" style="margin-bottom:12px"><b>You haven't joined as a player yet</b><p class="muted" style="margin:0">Join with your name to vote, get a Killer role and show up on the board.</p><button class="btn" data-act="tab" data-tab="live">Join the party</button></div>`}
   <div class="panel stack" style="align-items:center;text-align:center"><div class="award">Guests scan to join</div><div class="qr" id="qr" style="width:200px"></div><div class="mono">${esc(joinUrl())}</div>
   <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end.</p></div>
-  <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
+  <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}${Object.keys(GAMES).filter(g=>isOut(p.id,g)).length?`<small>Sitting out: ${Object.keys(GAMES).filter(g=>isOut(p.id,g)).map(g=>GAMES[g]).join(", ")}</small>`:""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
   <h3>Costume awards</h3><div class="panel">${(S.main.cats||[]).map(c=>`<label class="toggle" for="cat-${c.id}"><span><b>${esc(c.label)}</b> <span class="muted">· ${c.pts} pts${c.fixed?" · always on":""}</span></span><input type="checkbox" id="cat-${c.id}" data-cat="${c.id}" ${c.on?"checked":""} ${c.fixed||locked?"disabled":""}></label>`).join("")}${locked?`<p class="muted" style="margin:8px 0 0;font-size:14px">Locked because ballots are already in.</p>`:""}</div>
   <h3>Reset</h3><div class="stack">${hold("resetgames","Reset games, keep guests","ghost","Hold 1.3s · clears votes, points, killer")}${hold("wipe","Wipe everything","red","Hold 1.3s · everyone has to rejoin")}</div>
   <p class="muted" style="margin-top:16px;font-size:14px">Want to play on a second device as host? Open your host link there too.</p>`;
@@ -435,10 +442,10 @@ function vTV(){
   const N=ids().length,c=S.main.current,k=K();
   let now=`<div class="card"><div class="award" style="text-align:left">Up next</div><div class="what muted">Dares and hot-seat questions appear here.</div></div>`;
   if(c&&c.type==="dare")now=`<div class="card"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
-  if(c&&c.type==="hot")now=`<div class="card"><div class="award" style="text-align:left">Who's most likely to…</div><div class="what">${esc(c.q)}?</div>${c.win?`<div class="who">${c.win.map(id=>esc(nm(id))).join(" & ")||"Nobody voted"}</div><div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="stat"><b>${hotThisQ().length}/${N}</b>voted on their phones</div>`}</div>`;
+  if(c&&c.type==="hot")now=`<div class="card"><div class="award" style="text-align:left">Who's most likely to…</div><div class="what">${esc(c.q)}?</div>${c.win?`<div class="who">${c.win.map(id=>esc(nm(id))).join(" & ")||"Nobody voted"}</div><div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="stat"><b>${hotThisQ().length}/${inGame("hot").length}</b>voted on their phones</div>`}</div>`;
   let kill="";
   if(k.status==="live")kill=`<div class="stat"><b>${(k.dead||[]).length}</b>☠ ${(k.dead||[]).slice(-4).map(d=>esc(nm(d.id))).join(", ")||"no bodies yet"}</div>`;
-  if(k.status==="accusing")kill=`<div class="stat"><b>${accThisRound().length}/${N}</b>accusations in</div>`;
+  if(k.status==="accusing")kill=`<div class="stat"><b>${accThisRound().length}/${kPlayers().length}</b>accusations in</div>`;
   if(k.status==="revealed"&&k.result)kill=killerResult(k.result);
   const votes=S.main.reveal&&S.main.reveal.done?"":`<div class="stat"><b>${ballotCount()}/${N}</b>costume ballots sealed</div>`;
   return `<div class="tv"><div class="stack" style="min-width:0"><div class="brand">Graveyard Shift<small>Live leaderboard</small></div><div class="panel">${N?lbHtml(false):`<p class="muted" style="margin:0">Scan the code to join.</p>`}</div>
@@ -453,7 +460,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v3</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v4</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -516,13 +523,14 @@ const acts={
   replay(){up({"reveal.done":false,"reveal.step":0,"reveal.nonce":Date.now()})},
   pickacc(el){ui.accPick=el.dataset.id;render()},
   sealacc(){if(!ui.accPick)return;PARTY.collection("acc").doc(ME).set({pick:ui.accPick,round:K().round,at:Date.now()}).then(()=>{ui.accPick=null;toast("Accusation sealed 🔒")}).catch(err)},
-  hotpick(el){const c=S.main.current;if(!c||c.type!=="hot"||c.win)return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
+  hotpick(el){const c=S.main.current;if(!c||c.type!=="hot"||c.win||isOut(ME,"hot"))return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
   lvl(el){up({dareLevel:el.dataset.l})},
   draw:hostDraw,
   daredone(){const c=S.main.current;up({["points."+c.pid]:FV.increment(1)}).then(()=>{toast(nm(c.pid)+" +1");hostDraw()})},
   darechicken(){toast(nm(S.main.current.pid)+" drinks twice 🍺");hostDraw()},
   hotnew:hostHot,hotreveal:hostHotReveal,
   clearcur(){up({current:null})},
+  opt(el){const g=el.dataset.g,out=!isOut(ME,g);up({["players."+ME+".out."+g]:out}).then(()=>toast(out?"You're sitting out of "+GAMES[g]:"Welcome back to "+GAMES[g]))},
   editpts(){ui.editPts=!ui.editPts;render()},
   pm(el){up({["points."+el.dataset.id]:FV.increment(+el.dataset.n)})},
   kick(el){const id=el.dataset.id;if(ui.kickArm!==id){ui.kickArm=id;el.textContent="Tap again";setTimeout(()=>{if(ui.kickArm===id){ui.kickArm=null;render()}},3000);return}
@@ -558,7 +566,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v3<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v4<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

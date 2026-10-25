@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17101a">
+<title>Graveyard Shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Mono:wght@400;500&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ======== PASTE YOUR FIREBASE CONFIG HERE ======== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCYxx7MJXFrokOBYRdIS-GaLPMItW1VRAU",
+  authDomain: "graveyard-shift-c5038.firebaseapp.com",
+  projectId: "graveyard-shift-c5038",
+  storageBucket: "graveyard-shift-c5038.firebasestorage.app",
+  messagingSenderId: "27866932610",
+  appId: "1:27866932610:web:c3f7f0d3a310d992c99b9b"
+};
+/* The host opens the site with #host-<HOST_KEY> at the end of the link. Keep it secret. */
+const HOST_KEY = "hexed-4k9t2";
+const PARTY_ID = "halloween-2026";
+</script>
+<style>
+:root{
+  --night:#17101a; --crypt:#231727; --stone:#3a2a3e; --bone:#efe4d0; --ash:#a99a92;
+  --ember:#ff7a1a; --ember-dim:#ff7a1a33; --blood:#e0475a; --moss:#a6c46f;
+  --f-display:"Creepster","Impact",fantasy; --f-body:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"DM Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px);
+}
+html,body{height:100%;margin:0}
+body{background:var(--night);color:var(--bone);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%;
+  background-image:radial-gradient(120% 60% at 50% -10%,#ff7a1a1c,transparent 60%),radial-gradient(80% 50% at 100% 110%,#e0475a14,transparent 60%);background-attachment:fixed}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.app{max-width:640px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:12px;padding-bottom:110px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0 14px}
+.brand{font-family:var(--f-display);font-size:30px;letter-spacing:.04em;color:var(--ember);line-height:1;text-shadow:0 0 18px #ff7a1a55}
+.brand small{display:block;font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ash);text-shadow:none;margin-top:4px}
+.me{font-family:var(--f-mono);font-size:12px;color:var(--ash);text-align:right}
+.me b{display:block;color:var(--bone);font-family:var(--f-body);font-size:15px}
+.hostpill{display:inline-block;background:var(--blood);color:#fff;border-radius:99px;padding:1px 8px;font-size:10px;letter-spacing:.1em;margin-top:3px}
+h2{font-family:var(--f-display);font-weight:400;font-size:34px;letter-spacing:.03em;margin:4px 0 6px;line-height:1.05}
+h3{font-size:13px;font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.14em;color:var(--ash);margin:22px 0 10px;font-weight:500}
+p{margin:0 0 10px}
+.muted{color:var(--ash)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--crypt);border:1px solid var(--stone);border-radius:16px;padding:16px}
+.panel.host{border-color:#e0475a77;background:linear-gradient(#e0475a10,#e0475a06)}
+.panel.host > .award:first-child{color:var(--blood)}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.chip{background:var(--crypt);border:1.5px solid var(--stone);border-radius:12px;padding:12px 10px;text-align:left;font-weight:600;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.chip[aria-pressed="true"]{border-color:var(--ember);background:var(--ember-dim)}
+.chip.dead{text-decoration:line-through;opacity:.5}
+.chip .tag{font-family:var(--f-mono);font-size:12px;color:var(--moss);font-weight:500}
+.btn{display:block;width:100%;border:none;border-radius:14px;padding:15px 18px;font-weight:800;font-size:17px;background:var(--ember);color:#1a0d05;text-align:center}
+.btn.ghost{background:transparent;border:1.5px solid var(--stone);color:var(--bone);font-weight:600}
+.btn.red{background:var(--blood);color:#fff}
+.btn[disabled]{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px}
+.hold{position:relative;overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+.hold::after{content:"";position:absolute;inset:0;background:#ffffff40;transform:scaleX(0);transform-origin:left;pointer-events:none}
+.hold.holding::after{transform:scaleX(1);transition:transform 1.3s linear}
+.hint{display:block;font-size:11px;font-family:var(--f-mono);font-weight:500;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:2px}
+.meter{display:flex;align-items:baseline;gap:10px}
+.big{font-family:var(--f-display);font-size:56px;line-height:1;color:var(--ember)}
+.bar{height:8px;border-radius:99px;background:var(--stone);overflow:hidden}.bar i{display:block;height:100%;background:var(--ember)}
+.card{background:linear-gradient(160deg,#2c1d30,#1d1320);border:1px solid var(--stone);border-radius:20px;padding:22px 20px;min-height:180px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.card.you{border-color:var(--ember);box-shadow:0 0 30px #ff7a1a44}
+.card .who{font-family:var(--f-display);font-size:40px;color:var(--ember);line-height:1;overflow-wrap:anywhere}
+.card .what{font-size:22px;font-weight:600;line-height:1.3}
+.lvl{display:inline-block;align-self:flex-start;font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:99px;border:1px solid var(--stone);color:var(--ash)}
+.lvl.spicy{color:var(--ember);border-color:var(--ember)}.lvl.unhinged{color:var(--blood);border-color:var(--blood)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{background:transparent;border:1px solid var(--stone);border-radius:99px;padding:6px 12px;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--bone);color:var(--night);border-color:var(--bone)}
+.lb{display:flex;flex-direction:column}
+.lb .r{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--stone)}
+.lb .r:last-child{border-bottom:none}
+.lb .n{font-family:var(--f-mono);color:var(--ash);font-variant-numeric:tabular-nums}
+.lb .nm{font-weight:600;min-width:0;overflow-wrap:anywhere}.lb .nm small{display:block;font-weight:400;color:var(--ash);font-size:13px}
+.lb .pts{font-family:var(--f-mono);font-size:18px;font-variant-numeric:tabular-nums}
+.lb .r.top .nm{color:var(--ember)}
+.adj{display:flex;gap:4px}.adj button{width:34px;height:34px;border-radius:8px;border:1px solid var(--stone);background:var(--night)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#140d17f2;border-top:1px solid var(--stone);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  padding:8px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs .in{max-width:640px;margin:0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+nav.tabs button{background:none;border:none;border-radius:10px;padding:8px 2px;font-size:12px;font-weight:600;color:var(--ash);display:flex;flex-direction:column;align-items:center;gap:2px;position:relative}
+nav.tabs button b{font-size:20px;line-height:1}
+nav.tabs button[aria-current="page"]{color:var(--ember);background:var(--ember-dim)}
+nav.tabs button .dot{position:absolute;top:4px;right:22%;width:9px;height:9px;border-radius:9px;background:var(--blood)}
+.add{display:flex;gap:8px}.add input{flex:1;min-width:0;background:var(--night);border:1.5px solid var(--stone);border-radius:12px;padding:13px;color:var(--bone);font:inherit;font-size:16px}
+.add button{flex:0 0 auto;width:auto;padding:12px 18px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--stone)}
+.toggle:last-child{border-bottom:none}
+.toggle input{width:22px;height:22px;accent-color:var(--ember)}
+select{background:var(--night);color:var(--bone);border:1.5px solid var(--stone);border-radius:10px;padding:8px;font:inherit}
+.ov{position:fixed;inset:0;z-index:50;background:var(--night);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));overflow:auto;
+  background-image:radial-gradient(70% 50% at 50% 40%,#ff7a1a26,transparent 70%)}
+.ov .inner{max-width:640px;width:100%;display:flex;flex-direction:column;gap:16px;align-items:stretch}
+.count{font-family:var(--f-display);font-size:min(40vw,240px);color:var(--ember);line-height:1;animation:pulse .9s ease-out}
+@keyframes pulse{from{transform:scale(1.6);opacity:0}to{transform:scale(1);opacity:1}}
+.winner{font-family:var(--f-display);font-size:clamp(48px,13vw,140px);line-height:1;color:var(--ember);text-shadow:0 0 40px #ff7a1a88;overflow-wrap:anywhere;animation:rise 1s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes rise{from{transform:translateY(30px) scale(.8);opacity:0}to{transform:none;opacity:1}}
+.award{font-family:var(--f-mono);letter-spacing:.18em;text-transform:uppercase;color:var(--ash);font-size:13px}
+.runners{font-family:var(--f-mono);color:var(--ash);font-size:14px;font-variant-numeric:tabular-nums}
+.role{font-family:var(--f-display);font-size:64px;line-height:1}
+.peekbox{min-height:220px;border:2px dashed var(--stone);border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;text-align:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+.peekbox.on{border-style:solid;border-color:var(--blood)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--bone);color:var(--night);padding:10px 16px;border-radius:12px;font-weight:600;z-index:60;max-width:90%;text-align:center}
+.qr{background:#fff;padding:10px;border-radius:12px;display:inline-block;line-height:0}
+.qr img,.qr canvas{display:block;width:100%;height:auto}
+.mono{font-family:var(--f-mono);font-size:13px;overflow-wrap:anywhere}
+/* TV */
+body.tvmode .app,body.tvmode nav.tabs{display:none}
+.tv{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;gap:3vw;padding:3vw;
+  background-image:radial-gradient(60% 60% at 20% 0%,#ff7a1a22,transparent 60%),radial-gradient(50% 50% at 100% 100%,#e0475a1a,transparent 60%)}
+.tv .brand{font-size:clamp(32px,4.5vw,80px)}
+.tv .lb .r{padding:.9vw 0}.tv .lb .nm,.tv .lb .pts{font-size:clamp(18px,2.1vw,38px)}.tv .lb .n{font-size:clamp(14px,1.5vw,26px)}
+.tv .card .who{font-size:clamp(36px,5vw,96px)}.tv .card .what{font-size:clamp(20px,2.6vw,46px)}
+.tv .stat{font-family:var(--f-mono);font-size:clamp(14px,1.5vw,26px);color:var(--ash)}
+.tv .stat b{color:var(--bone);font-family:var(--f-display);font-size:1.8em;font-weight:400;margin-right:.3em}
+.tv .join{display:flex;gap:2vw;align-items:center}
+.tv .join .qr{width:clamp(120px,13vw,240px)}
+.tv .join p{font-size:clamp(16px,1.8vw,30px);margin:0}
+.tv .award{font-size:clamp(13px,1.3vw,22px)}
+@media (max-width:760px){.tv{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Graveyard Shift<small>Halloween · 10pm till late</small></div>
+    <div class="me" id="me"></div>
+  </header>
+  <main id="main"><div class="panel"><p class="muted" style="margin:0">Summoning the party…</p></div></main>
+</div>
+<nav class="tabs" id="tabs" hidden><div class="in" id="tabsin"></div></nav>
+<div id="tvroot"></div>
+<div id="layer"></div>
+
+<script>
+/* ================= content ================= */
+const DARES={
+mild:[
+"Give a 30-second backstory for your costume, fully in character.",
+"Do your best horror-movie scream. If nobody flinches, drink.",
+"Swap one costume piece with {o} until your next dare.",
+"Narrate {o}'s next sip like a nature documentary.",
+"Show everyone the last photo in your camera roll, or take 2 sips.",
+"Zombie-walk a full lap of the room. Slowly. With sound effects.",
+"Speak only in a whisper until the next dare. Slip up, drink.",
+"Toast {o} with a made-up three-line spooky poem.",
+"Make {o} a drink using three ingredients they don't get to choose.",
+"Do an impression of someone in this room. Wrong guessers drink.",
+"Pick a drinking buddy. Whenever you drink, they drink, until your next dare.",
+"Hold a séance: channel a dead celebrity in their voice for one minute.",
+"Waterfall. You start, and nobody stops until the person before them does.",
+"Let {o} draw something on your face with whatever makeup is around.",
+"Name your most irrational fear. Everyone who shares it drinks with you.",
+"Stay in character as your costume until someone calls you by your real name."
+],
+spicy:[
+"Read the last text you sent out loud, or finish your drink.",
+"Send a voice note howling at someone not here. No explanation.",
+"Give {o} a 20-second compliment with full eye contact. Laugh and you drink.",
+"Tell your most embarrassing party story, or take a shot.",
+"Swap drinks with {o} and finish theirs.",
+"Slow-dance with {o} for the next song. Fully committed.",
+"Show your screen-time report. The room roasts your top app.",
+"Rank everyone's costume out loud, worst to best. Last place gives you a dare.",
+"Never have I ever: say one. Everyone who has, drinks.",
+"Confess the worst thing you've done at a party. The room votes if it beats {o}'s.",
+"Trade one piece of clothing with {o} until the next game.",
+"Chug for as long as {o} can hold a scream.",
+"Predict everyone's horror-movie death. Anyone who agrees with theirs drinks.",
+"Hand {o} your phone. They read one group chat's last message out loud.",
+"Let {o} give you a new nickname. Anyone who forgets to use it drinks.",
+"Hot take: who here is most likely to be the killer? They decide if you drink."
+],
+unhinged:[
+"Two truths and a lie, all about tonight. Wrong guessers drink.",
+"Let {o} pick your next drink. Finish it.",
+"Take a shot without using your hands.",
+"Lead the room in a 30-second zombie dance. Anyone who doesn't join drinks.",
+"Make a toast to the night. If the room doesn't cheer, take a shot.",
+"Let the room write a 3-word caption for your next story. Post it.",
+"Swap entire costumes with {o} for 15 minutes.",
+"Stand on a chair and give a 30-second villain monologue.",
+"Everyone points at the drunkest person here. You and the winner take a shot together.",
+"Call a friend on speaker and convince them you've just seen a ghost.",
+"Finish your drink. That's the dare.",
+"Who here would you trust to help you bury a body? Who wouldn't you? Answer or take two.",
+"Hold a plank until {o} finishes their drink.",
+"Pick two people to arm-wrestle. Loser takes a shot, and you take one with them.",
+"Freestyle rap about {o}'s costume for 30 seconds.",
+"Give {o} your phone for 60 seconds, unlocked. They can do one harmless thing."
+]};
+const HOT=[
+"die first in a horror movie","accidentally summon a demon","be the killer and get away with it","cry before the night is over",
+"get kicked out of a haunted house","still be here at 4am","text an ex tonight","marry a vampire",
+"survive the zombie apocalypse the longest","secretly be a witch","scream first at a jump scare","spend the most on a costume and still lose",
+"befriend the ghost instead of running","start a cult","lose their phone tonight","trip while running from the killer",
+"split the group up to cover more ground","go investigate the noise in the basement","be found asleep in the bathtub",
+"have the most cursed search history","sell their soul for free drinks","get possessed and not notice","hook up at this party",
+"read the forbidden book out loud","eat all the Halloween candy before the kids show up"];
+const METHODS=[
+"Get them to say the word “candy”.","Get them to take something from your hand.","Get them to clink glasses with you.",
+"Get them to take a selfie with you.","Get them to tell you what time it is.","Get them to high-five you.",
+"Get them to taste your food or drink.","Get them to compliment your costume out loud."];
+const CATS=[
+{id:"scary",label:"Scariest",pts:3,on:true},{id:"funny",label:"Funniest",pts:3,on:true},
+{id:"lazy",label:"Laziest Effort",pts:0,on:false},{id:"best",label:"Best Costume",pts:5,on:true,fixed:true}];
+const LVL={mild:"Warm-up",spicy:"Spicy",unhinged:"Unhinged"};
+
+/* ================= utils ================= */
+const seal=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o)))).split("").reverse().join("");
+const unseal=(s,d)=>{try{return s?JSON.parse(decodeURIComponent(escape(atob(s.split("").reverse().join(""))))):d}catch(e){return d}};
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const uid=()=>"p"+Math.random().toString(36).slice(2,9);
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+function toast(t){const el=document.createElement("div");el.className="toast";el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
+const defaults=()=>({created:Date.now(),players:{},cats:JSON.parse(JSON.stringify(CATS)),killerCount:1,
+  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null});
+
+/* ================= app state ================= */
+const hash=location.hash.replace(/^#/,"");
+const MODE=hash==="tv"?"tv":"phone";
+if(hash==="host-"+HOST_KEY){ls.set("gs-host-"+PARTY_ID,"1");history.replaceState(null,"",location.pathname+location.search)}
+const IS_HOST=ls.get("gs-host-"+PARTY_ID)==="1"&&MODE!=="tv";
+let ME=ls.get("gs-me-"+PARTY_ID);
+const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null};
+const ui={tab:"live",flow:null,draft:{},accPick:null,editPts:false,revealShown:null,hotUsed:[],used:{mild:[],spicy:[],unhinged:[]}};
+let FS,PARTY,FV;
+
+const players=()=>S.main?Object.entries(S.main.players||{}).map(([id,p])=>({id,...p})).sort((a,b)=>(a.joined||0)-(b.joined||0)):[];
+const ids=()=>players().map(p=>p.id);
+const nm=id=>(S.main&&S.main.players&&S.main.players[id]?S.main.players[id].name:"Someone");
+const activeCats=()=>(S.main.cats||[]).filter(c=>c.on);
+const ballotCount=()=>S.ballots.filter(b=>S.main.players[b.id]).length;
+const myBallot=()=>{const b=S.ballots.find(b=>b.id===ME);return b?unseal(b.s,null):null};
+const K=()=>S.main.killer||defaults().killer;
+const accThisRound=()=>S.acc.filter(a=>a.round===K().round&&S.main.players[a.id]);
+const hotThisQ=()=>{const c=S.main.current;return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]):[]};
+function level(){const L=S.main.dareLevel||"auto";if(L!=="auto")return L;const d=new Date(),h=d.getHours(),t=(h<12?h+24:h)*60+d.getMinutes();return t<23*60+30?"mild":t<25*60?"spicy":"unhinged"}
+
+/* ================= db writes ================= */
+const up=o=>PARTY.update(o).catch(err);
+function err(e){console.error(e);toast("Couldn't save. Check your connection and try again.")}
+async function join(name){
+  name=name.trim().slice(0,24);if(!name)return;
+  if(players().some(p=>p.name.toLowerCase()===name.toLowerCase())){toast("That name's taken. Tap it above if it's you.");return}
+  const id=uid();await PARTY.update({["players."+id]:{name,joined:Date.now()}}).catch(err);
+  ME=id;ls.set("gs-me-"+PARTY_ID,id);ui.tab="live";render();
+}
+function claim(id){ME=id;ls.set("gs-me-"+PARTY_ID,id);ui.tab="live";render()}
+
+async function hostReveal(){
+  const res=activeCats().map(c=>{const t={};
+    S.ballots.forEach(b=>{if(!S.main.players[b.id])return;const bal=unseal(b.s,{});const id=bal[c.id];if(id&&S.main.players[id]&&id!==b.id)t[id]=(t[id]||0)+1});
+    const rank=Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v);const top=rank.length?rank[0].v:0;
+    return {id:c.id,label:c.label,pts:c.pts,rank,win:rank.filter(x=>x.v===top&&top>0).map(x=>x.id)}});
+  res.sort((a,b)=>(a.id==="best")-(b.id==="best"));
+  const o={reveal:{results:res,step:0,done:false,nonce:Date.now()}},add={};
+  res.forEach(r=>r.win.forEach(id=>{add[id]=(add[id]||0)+r.pts}));
+  Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
+  return up(o);
+}
+async function hostAssign(){
+  const all=shuffle(ids()),n=Math.min(S.main.killerCount||1,Math.max(1,Math.floor(all.length/3))),killers=all.slice(0,n),ms=shuffle(METHODS),round=(K().round||0)+1;
+  const b=FS.batch();
+  all.forEach(id=>{const ki=killers.indexOf(id);
+    b.set(PARTY.collection("roles").doc(id),{round,s:seal(ki>=0?{k:true,m:ms[ki],partners:killers.filter(x=>x!==id)}:{k:false})})});
+  b.update(PARTY,{killer:{status:"live",round,seen:[],dead:[],result:null}});
+  await b.commit().catch(err);toast("Roles sent. Everyone check your phone.");
+}
+async function hostUnmask(){
+  const k=K(),snap=await PARTY.collection("roles").get().catch(err);if(!snap)return;
+  const killers=[];snap.forEach(d=>{const x=d.data();if(x.round===k.round&&unseal(x.s,{}).k&&S.main.players[d.id])killers.push(d.id)});
+  const acc=accThisRound(),t={};acc.forEach(a=>{t[a.pick]=(t[a.pick]||0)+1});
+  const top=Math.max(0,...Object.values(t)),topIds=Object.keys(t).filter(id=>t[id]===top&&top>0);
+  const caught=topIds.length===1&&killers.includes(topIds[0]);
+  const right=acc.filter(a=>killers.includes(a.pick)&&!killers.includes(a.id)).map(a=>a.id);
+  const add={};right.forEach(id=>add[id]=(add[id]||0)+3);
+  const bodies=(k.dead||[]).length;killers.forEach(id=>add[id]=(add[id]||0)+2*bodies+(caught?0:5));
+  const o={"killer.status":"revealed","killer.result":{killers,top:topIds,caught,right,bodies,nonce:Date.now()}};
+  Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
+  return up(o);
+}
+function hostDraw(){
+  const lv=level(),pool=DARES[lv];let used=ui.used[lv];if(used.length>=pool.length)used=ui.used[lv]=[];
+  const idx=shuffle(pool.map((_,i)=>i).filter(i=>!used.includes(i)))[0];used.push(idx);
+  const all=ids();if(all.length<2){toast("Need at least 2 guests");return}
+  const dc=S.main.dareCount||{},cur=S.main.current,min=Math.min(...all.map(id=>dc[id]||0));
+  const cand=all.filter(id=>(dc[id]||0)===min&&!(cur&&cur.pid===id));
+  const pid=rnd(cand.length?cand:all),o=rnd(all.filter(id=>id!==pid));
+  return up({current:{type:"dare",pid,lvl:lv,text:pool[idx].replace(/\{o\}/g,nm(o)),at:Date.now()},["dareCount."+pid]:FV.increment(1)});
+}
+function hostHot(){let pool=HOT.map((_,i)=>i).filter(i=>!ui.hotUsed.includes(i));if(!pool.length){ui.hotUsed=[];pool=HOT.map((_,i)=>i)}
+  const i=rnd(pool);ui.hotUsed.push(i);return up({current:{type:"hot",q:HOT[i],qid:"q"+Date.now(),win:null,at:Date.now()}})}
+function hostHotReveal(){const c=S.main.current,t={};hotThisQ().forEach(h=>{t[h.pick]=(t[h.pick]||0)+1});
+  const top=Math.max(0,...Object.values(t)),win=Object.keys(t).filter(id=>t[id]===top&&top>0);
+  const o={"current.win":win,"current.tally":Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v).slice(0,5)};
+  win.forEach(id=>o["titles."+id]=FV.arrayUnion(c.q));return up(o)}
+async function clearCol(name){const s=await PARTY.collection(name).get();let b=FS.batch(),n=0;
+  for(const d of s.docs){b.delete(d.ref);if(++n===450){await b.commit();b=FS.batch();n=0}}if(n)await b.commit()}
+async function hostReset(keepGuests){
+  try{await Promise.all(["ballots","acc","hotvotes","roles"].map(clearCol));
+    const d=defaults();if(keepGuests){d.players=S.main.players;d.cats=S.main.cats;d.killerCount=S.main.killerCount}
+    await PARTY.set(d);ui.flow=null;toast(keepGuests?"Games reset. Guests kept.":"Party wiped.")}catch(e){err(e)}
+}
+
+/* ================= view helpers ================= */
+const hold=(act,label,cls="",hint="Hold to confirm",dis=false)=>`<button class="btn hold ${cls}" data-hold="${act}" ${dis?"disabled":""}>${label}<span class="hint">${hint}</span></button>`;
+function chips(list,act,{sel,dead=[],tag,extra=""}={}){return `<div class="chips">${list.map(id=>`<button class="chip ${dead.includes(id)?"dead":""}" data-act="${act}" data-id="${id}" ${extra} aria-pressed="${Array.isArray(sel)?sel.includes(id):sel===id}"><span>${esc(nm(id))}</span>${tag&&tag(id)?`<span class="tag">${tag(id)}</span>`:""}</button>`).join("")}</div>`}
+function meter(n,N,label){return `<div class="panel stack"><div class="meter"><span class="big">${n}</span><span class="muted">of ${N} ${label}</span></div><div class="bar"><i style="width:${N?Math.min(100,n/N*100):0}%"></i></div></div>`}
+const hostBox=(inner)=>IS_HOST?`<div class="panel host stack" style="margin-top:18px"><div class="award">Host controls</div>${inner}</div>`:"";
+function joinUrl(){return location.origin+location.pathname}
+
+/* ================= views ================= */
+function vJoin(){
+  const ps=players();
+  return `<h2>Enter if you dare</h2><p class="muted">Pick your name so the games know who you are.</p>
+  <div class="panel stack"><form class="add" id="joinf"><input id="joinname" placeholder="Your name" autocomplete="off" maxlength="24" autocapitalize="words"><button class="btn" type="submit">Join</button></form></div>
+  ${ps.length?`<h3>Already joined? Tap your name</h3>${chips(ps.map(p=>p.id),"claim")}`:""}
+  ${IS_HOST?`<p class="muted" style="margin-top:16px">You're the host. Join with your own name too so you can play.</p>`:""}`;
+}
+function vVote(){
+  const R=S.main.reveal,N=ids().length,n=ballotCount();
+  if(R&&R.done)return `<h2>The crowns are claimed</h2>${R.results.slice().reverse().map(r=>`<div class="panel" style="margin-bottom:10px"><div class="award">${esc(r.label)}</div><div style="font-family:var(--f-display);font-size:32px;color:var(--ember)">${r.win.map(id=>esc(nm(id))).join(" & ")||"No votes"}</div><div class="runners">${r.rank.slice(0,4).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div></div>`).join("")}
+    ${hostBox(`<button class="btn ghost" data-act="replay">Replay the reveal on every screen</button>`)}`;
+  const mine=myBallot(),cats=activeCats(),others=ids().filter(id=>id!==ME);
+  if(!ui.draft._init){ui.draft=Object.assign({_init:1},mine||{})}
+  const editing=!mine||ui.flow==="editvote";
+  const all=cats.every(c=>ui.draft[c.id]);
+  return `<h2>Costume awards</h2><p class="muted">Your ballot is sealed the moment you submit. Nobody sees any votes until the host reveals the winners, including the host.</p>
+  ${meter(n,N,"ballots sealed")}
+  ${editing?`${cats.slice().reverse().map(c=>`<h3>${esc(c.label)}</h3>${others.length?chips(others,"pick",{sel:ui.draft[c.id],extra:`data-cat="${c.id}"`}):`<p class="muted">Waiting for more guests to join.</p>`}`).join("")}
+    <div style="height:14px"></div><button class="btn" data-act="sealvote" ${all?"":"disabled"}>${mine?"Re-seal my ballot":"Seal my ballot"}</button>${mine?`<div style="height:8px"></div><button class="btn ghost" data-act="canceledit">Keep my old ballot</button>`:""}`
+  :`<div class="panel stack" style="text-align:center;margin-top:12px"><div style="font-size:52px">🕯️</div><b>Your ballot is sealed</b><p class="muted" style="margin:0">You can still change it until the host locks voting.</p><button class="btn ghost" data-act="editvote">Change my vote</button></div>`}
+  ${hostBox(`<p class="muted" style="margin:0">You'll only ever see the count. ${N-n} guest${N-n===1?"":"s"} still to vote.</p>${hold("reveal","Lock voting &amp; reveal winners","red",n<2?"Need at least 2 ballots":"Hold 1.3s · plays the reveal on every screen",n<2)}`)}`;
+}
+function fReveal(){
+  const R=S.main.reveal,r=R.results[R.step];if(!r)return"";const last=R.step>=R.results.length-1,key=R.step+":"+R.nonce,showing=ui.revealShown===key;
+  let body=!showing?`<div class="award">And the ${esc(r.label)} award goes to…</div><div class="count" id="cd">3</div>`
+    :`<div class="award">${esc(r.label)}</div><div class="winner">${r.win.map(id=>esc(nm(id))).join(" & ")||"Nobody?!"}</div>
+    <div class="runners">${r.win.length>1?"A tie! ":""}${r.rank.slice(0,5).map(x=>`${esc(nm(x.id))} · ${x.v}`).join("&nbsp;&nbsp; ")}</div>${r.pts&&r.win.length?`<div class="muted">+${r.pts} points</div>`:""}`;
+  const ctl=IS_HOST&&MODE!=="tv"&&showing?`<button class="btn" data-act="${last?"endreveal":"nextaward"}">${last?"Finish the ceremony":"Next award"}</button>`:"";
+  return `<div class="inner">${body}${ctl}</div>`;
+}
+function killerResult(R){return `<div class="panel stack" style="text-align:center"><div class="award">The killer${R.killers.length>1?"s were":" was"}</div><div class="winner" style="font-size:clamp(44px,9vw,110px)">${R.killers.map(id=>esc(nm(id))).join(" & ")||"?"}</div>
+  <p style="margin:0">${R.caught?"Caught! The room got it right.":"Got away with it."} ${R.bodies} bod${R.bodies===1?"y":"ies"} on the floor.</p>
+  <div class="runners">Most accused: ${R.top.map(id=>esc(nm(id))).join(" & ")||"nobody"}</div>
+  <div class="runners">Guessed right (+3): ${R.right.map(id=>esc(nm(id))).join(", ")||"nobody"}</div></div>`}
+function vKiller(){
+  const k=K(),all=ids(),dead=(k.dead||[]).map(d=>d.id),N=all.length;
+  const rules=`<div class="panel stack"><b>How it works</b>
+  <p class="muted" style="margin:0">Your phone secretly tells you if you're a killer. ${(S.main.killerCount||1)>1?"There are two killers, and they know each other.":"There's one killer."} Killers get a secret method, like getting you to clink glasses. When a killer pulls it off, they whisper “you're dead.” Report it here, take a drink, and keep partying as a ghost. Later, everyone votes on who did it.</p>
+  <p class="muted" style="margin:0"><b style="color:var(--bone)">Points:</b> killers +2 per body. Guess right +3. A killer who isn't caught +5.</p></div>`;
+  if(k.status==="off")return `<h2>Who's the Killer?</h2>${rules}${IS_HOST?hostBox(`<label class="toggle" for="kc" style="border:none;padding:0"><span>Number of killers</span><select id="kc"><option value="1" ${S.main.killerCount==1?"selected":""}>1</option><option value="2" ${S.main.killerCount==2?"selected":""}>2</option></select></label>${hold("assign","Assign secret roles","red",N<4?"Need at least 4 guests":"Hold 1.3s · sends a role to every phone",N<4)}`):`<div class="panel" style="margin-top:12px"><p class="muted" style="margin:0">Waiting for the host to start the game.</p></div>`}`;
+  const role=S.role&&S.role.round===k.round?unseal(S.role.s,null):null,iDead=dead.includes(ME);
+  const graveyard=`<h3>Graveyard (${dead.length})</h3><div class="panel">${dead.length?`<div class="lb">${k.dead.map((d,i)=>`<div class="r"><span class="n">${i+1}</span><span class="nm">${esc(nm(d.id))}</span><span class="pts muted" style="font-size:13px">${new Date(d.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">No bodies yet. Stay alert.</p>`}</div>`;
+  if(k.status==="live"){
+    const peek=role?`<div class="peekbox" id="peek" data-peek="1"><div id="peekoff"><div style="font-size:44px">👁</div><b>Press and hold to see your role</b><p class="muted" style="margin:0">Let go to hide it. Shield your screen.</p></div>
+      <div id="peekon" hidden>${role.k?`<div class="role" style="color:var(--blood)">KILLER</div><p style="font-size:19px;font-weight:600;margin:0">${esc(role.m)}</p><p class="muted" style="margin:0">Then whisper “you're dead.”${role.partners&&role.partners.length?` Your partner: <b style="color:var(--bone)">${esc(role.partners.map(nm).join(", "))}</b>.`:""}</p>`
+      :`<div class="role" style="color:var(--moss)">INNOCENT</div><p class="muted" style="margin:0">Survive. Watch for strange requests. Sniff out the killer.</p>`}</div></div>`
+      :`<div class="panel"><p class="muted" style="margin:0">You joined after roles went out, so you're innocent this round. Stay alive anyway.</p></div>`;
+    return `<h2>Someone here is lying</h2>${peek}
+    <div style="height:14px"></div>${iDead?`<div class="panel" style="text-align:center"><div style="font-size:40px">☠</div><b>You're dead.</b><p class="muted" style="margin:0">Haunt the party. You still get to vote at the end.</p></div>`
+      :hold("die","☠ I've been killed","red","Hold 1.3s · don't say who did it")}
+    ${graveyard}<div style="height:14px"></div>${rules}
+    ${hostBox(`<p class="muted" style="margin:0">${(k.seen||[]).length} of ${N} have peeked at their role.</p>${hold("accuse","Start the accusation vote","","Hold 1.3s · every phone gets a ballot")}`)}`;
+  }
+  if(k.status==="accusing"){
+    const mine=S.acc.find(a=>a.id===ME&&a.round===k.round),others=all.filter(id=>id!==ME),n=accThisRound().length;
+    return `<h2>Point the finger</h2><p class="muted">Dead or alive, vote for who you think the killer is. Your vote stays secret.</p>${meter(n,N,"accusations in")}
+    <h3>${mine?"You accused "+esc(nm(mine.pick))+". Change it?":"Who did it?"}</h3>${chips(others,"pickacc",{sel:ui.accPick||(mine&&mine.pick),dead})}
+    <div style="height:12px"></div><button class="btn red" data-act="sealacc" ${(ui.accPick&&(!mine||ui.accPick!==mine.pick))?"":"disabled"}>${mine?"Change my accusation":"Seal my accusation"}</button>
+    ${graveyard}${hostBox(hold("unmask","Unmask the killer","red",n<2?"Need at least 2 votes":"Hold 1.3s · shows on every screen",n<2))}`;
+  }
+  return `<h2>Unmasked</h2>${k.result?killerResult(k.result):""}${graveyard}${hostBox(hold("killreset","New round of Killer","ghost","Hold 1.3s · new secret roles"))}`;
+}
+function vLive(){
+  const c=S.main.current,lv=level();let card;
+  if(!c)card=`<div class="card"><div class="award" style="text-align:left">Nothing happening… yet</div><div class="what muted">Dares and Hot Seat questions show up here. Keep your phone handy.</div></div>`;
+  else if(c.type==="dare")card=`<div class="card ${c.pid===ME?"you":""}"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${c.pid===ME?"YOU, "+esc(nm(c.pid)).toUpperCase():esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
+  else{const mine=S.hot.find(h=>h.id===ME&&h.qid===c.qid),n=hotThisQ().length,N=ids().length;
+    card=`<div class="card"><div class="award" style="text-align:left">Hot seat · who's most likely to…</div><div class="what" style="font-size:26px">${esc(c.q)}?</div>
+      ${c.win?`<div class="who">${c.win.length?c.win.map(id=>esc(nm(id))).join(" & "):"Nobody voted"}</div>${c.win.length?`<p style="margin:0">${c.win.includes(ME)?"That's you. Drink up.":"Drink up, and the title is yours."}</p>`:""}<div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="runners">${n} of ${N} voted</div>`}</div>
+      ${c.win?"":`<h3>${mine?"You picked "+esc(nm(mine.pick))+". Tap to change.":"Tap your pick"}</h3>${chips(ids(),"hotpick",{sel:mine&&mine.pick})}`}`}
+  const host=IS_HOST?hostBox(`<div class="seg">${["auto","mild","spicy","unhinged"].map(l=>`<button data-act="lvl" data-l="${l}" aria-pressed="${(S.main.dareLevel||"auto")===l}">${l==="auto"?"Auto ("+LVL[lv]+")":LVL[l]}</button>`).join("")}</div>
+    <p class="muted" style="margin:0;font-size:14px">Auto gets nastier through the night: warm-up until 11:30, spicy until 1, then unhinged.</p>
+    ${c&&c.type==="dare"?`<div class="row"><button class="btn" data-act="daredone">Did it · +1</button><button class="btn ghost" data-act="darechicken">Chickened out</button></div>`:""}
+    <button class="btn ${c&&c.type==="dare"?"ghost":""}" data-act="draw">${c&&c.type==="dare"?"Skip · new dare":"Draw a dare"}</button>
+    ${c&&c.type==="hot"&&!c.win?`<button class="btn red" data-act="hotreveal" ${hotThisQ().length?"":"disabled"}>Reveal hot-seat results</button>`:""}
+    <button class="btn ${c&&c.type==="hot"&&!c.win?"ghost":""}" data-act="hotnew">${c&&c.type==="hot"?"Next hot-seat question":"Ask a hot-seat question"}</button>
+    ${c?`<button class="btn ghost" data-act="clearcur">Clear the screen</button>`:""}`):"";
+  return `<h2>Now playing</h2>${card}${host}`;
+}
+function ranked(){const pts=S.main.points||{},t=S.main.titles||{};return ids().map(id=>({id,pts:pts[id]||0,t:(t[id]||[]).length})).sort((a,b)=>b.pts-a.pts||nm(a.id).localeCompare(nm(b.id)))}
+function lbHtml(edit){const r=ranked(),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
+  return `<div class="lb">${r.map((x,i)=>`<div class="r ${top!==null&&x.pts===top?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(x.id))}${top!==null&&x.pts===top?" 👑":""}${k.status==="live"&&dead.includes(x.id)?" ☠":""}${x.id===ME&&MODE!=="tv"?" <span class=\"muted\">(you)</span>":""}${x.t?`<small>${x.t} hot-seat title${x.t>1?"s":""}</small>`:""}</span>${edit?`<span class="adj"><button data-act="pm" data-id="${x.id}" data-n="-1" aria-label="Minus one">−</button><button data-act="pm" data-id="${x.id}" data-n="1" aria-label="Plus one">+</button></span>`:`<span class="pts">${x.pts}</span>`}</div>`).join("")}</div>`}
+function vBoard(){
+  const titles=Object.entries(S.main.titles||{}).flatMap(([id,ts])=>(S.main.players[id]?ts:[]).map(t=>({id,t})));
+  return `<h2>Leaderboard</h2><p class="muted">Top of the board at the end of the night is Party MVP.</p><div class="panel">${ids().length?lbHtml(ui.editPts):`<p class="muted" style="margin:0">No guests yet.</p>`}</div>
+  ${titles.length?`<h3>Hot-seat titles</h3><div class="panel">${titles.slice(-15).reverse().map(x=>`<p style="margin:0 0 6px"><b>${esc(nm(x.id))}</b> <span class="muted">· most likely to ${esc(x.t)}</span></p>`).join("")}</div>`:""}
+  ${hostBox(`<button class="btn ghost" data-act="editpts">${ui.editPts?"Done adjusting":"Adjust points"}</button>`)}`;
+}
+function vHost(){
+  const ps=players(),locked=S.ballots.length>0;
+  return `<h2>Host desk</h2>
+  <div class="panel stack" style="align-items:center;text-align:center"><div class="award">Guests scan to join</div><div class="qr" id="qr" style="width:200px"></div><div class="mono">${esc(joinUrl())}</div>
+  <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end.</p></div>
+  <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
+  <h3>Costume awards</h3><div class="panel">${(S.main.cats||[]).map(c=>`<label class="toggle" for="cat-${c.id}"><span><b>${esc(c.label)}</b> <span class="muted">· ${c.pts} pts${c.fixed?" · always on":""}</span></span><input type="checkbox" id="cat-${c.id}" data-cat="${c.id}" ${c.on?"checked":""} ${c.fixed||locked?"disabled":""}></label>`).join("")}${locked?`<p class="muted" style="margin:8px 0 0;font-size:14px">Locked because ballots are already in.</p>`:""}</div>
+  <h3>Reset</h3><div class="stack">${hold("resetgames","Reset games, keep guests","ghost","Hold 1.3s · clears votes, points, killer")}${hold("wipe","Wipe everything","red","Hold 1.3s · everyone has to rejoin")}</div>
+  <p class="muted" style="margin-top:16px;font-size:14px">Want to play on a second device as host? Open your host link there too.</p>`;
+}
+function vTV(){
+  const N=ids().length,c=S.main.current,k=K();
+  let now=`<div class="card"><div class="award" style="text-align:left">Up next</div><div class="what muted">Dares and hot-seat questions appear here.</div></div>`;
+  if(c&&c.type==="dare")now=`<div class="card"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
+  if(c&&c.type==="hot")now=`<div class="card"><div class="award" style="text-align:left">Who's most likely to…</div><div class="what">${esc(c.q)}?</div>${c.win?`<div class="who">${c.win.map(id=>esc(nm(id))).join(" & ")||"Nobody voted"}</div><div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="stat"><b>${hotThisQ().length}/${N}</b>voted on their phones</div>`}</div>`;
+  let kill="";
+  if(k.status==="live")kill=`<div class="stat"><b>${(k.dead||[]).length}</b>☠ ${(k.dead||[]).slice(-4).map(d=>esc(nm(d.id))).join(", ")||"no bodies yet"}</div>`;
+  if(k.status==="accusing")kill=`<div class="stat"><b>${accThisRound().length}/${N}</b>accusations in</div>`;
+  if(k.status==="revealed"&&k.result)kill=killerResult(k.result);
+  const votes=S.main.reveal&&S.main.reveal.done?"":`<div class="stat"><b>${ballotCount()}/${N}</b>costume ballots sealed</div>`;
+  return `<div class="tv"><div class="stack" style="min-width:0"><div class="brand">Graveyard Shift<small>Live leaderboard</small></div><div class="panel">${N?lbHtml(false):`<p class="muted" style="margin:0">Scan the code to join.</p>`}</div>
+  <div class="join"><div class="qr" id="qr"></div><div><div class="award">Join the party</div><p>Scan with your phone camera</p></div></div></div>
+  <div class="stack" style="min-width:0;justify-content:center">${now}${votes}${kill}</div></div>`;
+}
+
+/* ================= render ================= */
+let qrNode=null;
+function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)return;
+  if(!qrNode){qrNode=document.createElement("div");try{new QRCode(qrNode,{text:joinUrl(),width:400,height:400,colorDark:"#17101a",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M})}catch(e){}}
+  if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
+function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
+function render(){
+  if(!S.loaded)return;
+  const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
+  if(!S.main){
+    tabs.hidden=true;
+    main.innerHTML=IS_HOST?`<div class="panel stack"><h2>Open the party</h2><p class="muted">This creates the party so guests can join.</p><button class="btn" data-act="create">Open the crypt</button></div>`
+      :`<div class="panel stack"><h2>Not open yet</h2><p class="muted">The host hasn't opened the party. Try again in a bit.</p></div>`;
+    layer.innerHTML="";return;
+  }
+  if(MODE==="tv"){document.body.classList.add("tvmode");document.getElementById("tvroot").innerHTML=vTV();renderOverlay();drawQR();return}
+  const meName=ME&&S.main.players[ME]?S.main.players[ME].name:null;
+  document.getElementById("me").innerHTML=meName?`playing as<b>${esc(meName)}</b>${IS_HOST?`<span class="hostpill">HOST</span>`:""}`:(IS_HOST?`<span class="hostpill">HOST</span>`:"");
+  if(!meName&&ui.tab!=="host"){tabs.hidden=!IS_HOST;main.innerHTML=vJoin();renderTabs();renderOverlay();return}
+  tabs.hidden=false;renderTabs();
+  const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null;
+  const v={live:vLive,vote:vVote,killer:vKiller,board:vBoard,host:vHost}[ui.tab]||vLive;
+  main.innerHTML=meName||ui.tab==="host"?v():vJoin();
+  if(keep){const i=document.getElementById(keep);i&&i.focus()}
+  renderOverlay();drawQR();
+}
+function renderTabs(){
+  const k=K(),c=S.main.current,mine=myBallot();
+  const t=[["live","🃏","Now",c&&!(c.type==="hot"&&(c.win||S.hot.some(h=>h.id===ME&&h.qid===c.qid)))&&ui.tab!=="live"],
+    ["vote","👑","Costumes",!mine&&!(S.main.reveal)],["killer","🔪","Killer",(k.status==="live"&&S.role&&S.role.round===k.round&&!(k.seen||[]).includes(ME))||(k.status==="accusing"&&!S.acc.some(a=>a.id===ME&&a.round===k.round))],["board","🏆","Board",false]];
+  if(IS_HOST)t.push(["host","⚙︎","Host",false]);
+  const meIn=ME&&S.main.players[ME];
+  document.getElementById("tabsin").innerHTML=t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"disabled style=\"opacity:.35\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join("");
+}
+function renderOverlay(){
+  const layer=document.getElementById("layer"),R=S.main.reveal;
+  if(R&&!R.done&&R.results&&R.results[R.step]){layer.innerHTML=`<div class="ov">${fReveal()}</div>`;runCountdown();return}
+  const kr=K().result;
+  if(MODE==="tv"&&K().status==="revealed"&&kr&&ui.unmaskSeen!==kr.nonce&&Date.now()-kr.nonce<20000){
+    layer.innerHTML=`<div class="ov"><div class="inner">${killerResult(kr)}</div></div>`;clearTimeout(ui.unT);ui.unT=setTimeout(()=>{ui.unmaskSeen=kr.nonce;renderOverlay()},15000);return}
+  layer.innerHTML="";
+}
+let cdKey=null;
+function runCountdown(){const R=S.main.reveal,key=R.step+":"+R.nonce;if(ui.revealShown===key||cdKey===key)return;cdKey=key;
+  let n=3;const tick=()=>{if(cdKey!==key)return;const el=document.getElementById("cd");if(n>0){if(el){el.textContent=n;el.style.animation="none";void el.offsetWidth;el.style.animation=""}n--;setTimeout(tick,1000)}else{ui.revealShown=key;cdKey=null;render()}};tick()}
+
+/* ================= actions ================= */
+const holdActs={
+  reveal:hostReveal,assign:hostAssign,unmask:hostUnmask,
+  accuse:()=>up({"killer.status":"accusing"}),
+  killreset:()=>up({"killer.status":"off","killer.result":null,"killer.dead":[],"killer.seen":[]}),
+  die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>toast("Rest in pieces. Take a drink."))},
+  resetgames:()=>hostReset(true),wipe:()=>hostReset(false)
+};
+const acts={
+  tab(el){ui.tab=el.dataset.tab;ui.flow=null;ui.draft={};ui.accPick=null;render();scrollTo(0,0)},
+  create(){PARTY.set(defaults()).catch(err)},
+  claim(el){claim(el.dataset.id)},
+  pick(el){ui.draft[el.dataset.cat]=el.dataset.id;render()},
+  editvote(){ui.flow="editvote";ui.draft=Object.assign({_init:1},myBallot()||{});render()},
+  canceledit(){ui.flow=null;ui.draft={};render()},
+  sealvote(){if(S.main.reveal){toast("Voting is locked");return}const p={};activeCats().forEach(c=>p[c.id]=ui.draft[c.id]);
+    PARTY.collection("ballots").doc(ME).set({s:seal(p),at:Date.now()}).then(()=>{ui.flow=null;toast("Ballot sealed 🕯️")}).catch(err)},
+  nextaward(){up({"reveal.step":S.main.reveal.step+1})},
+  endreveal(){up({"reveal.done":true})},
+  replay(){up({"reveal.done":false,"reveal.step":0,"reveal.nonce":Date.now()})},
+  pickacc(el){ui.accPick=el.dataset.id;render()},
+  sealacc(){if(!ui.accPick)return;PARTY.collection("acc").doc(ME).set({pick:ui.accPick,round:K().round,at:Date.now()}).then(()=>{ui.accPick=null;toast("Accusation sealed 🔒")}).catch(err)},
+  hotpick(el){const c=S.main.current;if(!c||c.type!=="hot"||c.win)return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
+  lvl(el){up({dareLevel:el.dataset.l})},
+  draw:hostDraw,
+  daredone(){const c=S.main.current;up({["points."+c.pid]:FV.increment(1)}).then(()=>{toast(nm(c.pid)+" +1");hostDraw()})},
+  darechicken(){toast(nm(S.main.current.pid)+" drinks twice 🍺");hostDraw()},
+  hotnew:hostHot,hotreveal:hostHotReveal,
+  clearcur(){up({current:null})},
+  editpts(){ui.editPts=!ui.editPts;render()},
+  pm(el){up({["points."+el.dataset.id]:FV.increment(+el.dataset.n)})},
+  kick(el){const id=el.dataset.id;if(ui.kickArm!==id){ui.kickArm=id;el.textContent="Tap again";setTimeout(()=>{if(ui.kickArm===id){ui.kickArm=null;render()}},3000);return}
+    ui.kickArm=null;up({["players."+id]:FV.delete(),["points."+id]:FV.delete()});PARTY.collection("ballots").doc(id).delete().catch(()=>{})}
+};
+document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el||el.disabled)return;const f=acts[el.dataset.act];if(f)f(el)});
+document.addEventListener("submit",e=>{if(e.target.id==="joinf"){e.preventDefault();join(document.getElementById("joinname").value)}});
+document.addEventListener("change",e=>{const t=e.target;
+  if(t.dataset.cat){const cats=S.main.cats.map(c=>c.id===t.dataset.cat?{...c,on:t.checked}:c);up({cats})}
+  if(t.id==="kc")up({killerCount:+t.value})});
+let holdT=null,holdEl=null;
+document.addEventListener("pointerdown",e=>{
+  const pk=e.target.closest("[data-peek]");
+  if(pk){pk.classList.add("on");pk.querySelector("#peekoff").hidden=true;pk.querySelector("#peekon").hidden=false;try{pk.setPointerCapture(e.pointerId)}catch(_){}
+    const k=K();if(!(k.seen||[]).includes(ME))up({"killer.seen":FV.arrayUnion(ME)});return}
+  const h=e.target.closest("[data-hold]");if(!h||h.disabled)return;holdEl=h;h.classList.add("holding");
+  holdT=setTimeout(()=>{h.classList.remove("holding");holdEl=null;holdT=null;const f=holdActs[h.dataset.hold];if(f)f()},1300)});
+function endHold(){const pk=document.getElementById("peek");if(pk&&pk.classList.contains("on")){pk.classList.remove("on");pk.querySelector("#peekoff").hidden=false;pk.querySelector("#peekon").hidden=true}
+  if(holdT){clearTimeout(holdT);holdT=null}if(holdEl){holdEl.classList.remove("holding");holdEl=null}}
+["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,endHold));
+document.addEventListener("contextmenu",e=>{if(e.target.closest("[data-hold],[data-peek]"))e.preventDefault()});
+document.addEventListener("keydown",e=>{const h=e.target.closest&&e.target.closest("[data-hold]");if(h&&!h.disabled&&(e.key==="Enter"||e.key===" ")){e.preventDefault();const f=holdActs[h.dataset.hold];f&&f()}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)endHold()});
+
+/* ================= boot ================= */
+function boot(){
+  if(!FIREBASE_CONFIG.projectId){S.loaded=true;setup("The Firebase settings haven't been added to this file yet.");return}
+  if(!window.firebase){setup("Couldn't load the game engine. Check your internet connection and refresh.");return}
+  firebase.initializeApp(FIREBASE_CONFIG);FS=firebase.firestore();FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
+  PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
+    if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
+    if(!S.main||!S.main.reveal)ui.revealShown=null;
+    render()},e=>{console.error(e);S.loaded=true;setup("Can't reach the party database. If you're the host, check the Firestore rules allow reads and writes.")});
+  const col=(name,key)=>PARTY.collection(name).onSnapshot(q=>{S[key]=q.docs.map(d=>({id:d.id,...d.data()}));render()},e=>console.error(e));
+  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");
+  if(ME&&MODE!=="tv")PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{});
+  if(MODE==="tv"){try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}}
+  setInterval(()=>{if(MODE==="tv"||ui.tab==="live")render()},60000);
+}
+/* roles listener must follow identity changes */
+const _claim=claim;claim=function(id){_claim(id);if(PARTY&&MODE!=="tv")PARTY.collection("roles").doc(id).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{})};
+const _join=join;join=async function(n){const before=ME;await _join(n);if(ME&&ME!==before&&PARTY)PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{})};
+boot();
+</script>
+</body>
+</html>

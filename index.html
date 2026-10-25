@@ -418,7 +418,8 @@ function vBoard(){
 }
 function vHost(){
   const ps=players(),locked=S.ballots.length>0;
-  return `<h2>Host desk</h2>
+  const meIn=ME&&S.main.players[ME];
+  return `<h2>Host desk</h2>${meIn?"":`<div class="panel stack" style="margin-bottom:12px"><b>You haven't joined as a player yet</b><p class="muted" style="margin:0">Join with your name to vote, get a Killer role and show up on the board.</p><button class="btn" data-act="tab" data-tab="live">Join the party</button></div>`}
   <div class="panel stack" style="align-items:center;text-align:center"><div class="award">Guests scan to join</div><div class="qr" id="qr" style="width:200px"></div><div class="mono">${esc(joinUrl())}</div>
   <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end.</p></div>
   <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
@@ -474,7 +475,7 @@ function renderTabs(){
     ["vote","👑","Costumes",!mine&&!(S.main.reveal)],["killer","🔪","Killer",(k.status==="live"&&S.role&&S.role.round===k.round&&!(k.seen||[]).includes(ME))||(k.status==="accusing"&&!S.acc.some(a=>a.id===ME&&a.round===k.round))],["board","🏆","Board",false]];
   if(IS_HOST)t.push(["host","⚙︎","Host",false]);
   const meIn=ME&&S.main.players[ME];
-  document.getElementById("tabsin").innerHTML=t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"disabled style=\"opacity:.35\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join("");
+  document.getElementById("tabsin").innerHTML=t.map(([id,i,l,dot])=>`<button data-act="tab" data-tab="${id}" aria-current="${ui.tab===id?"page":"false"}" ${!meIn&&id!=="host"?"style=\"opacity:.5\"":""}><b>${i}</b>${l}${dot&&meIn?`<span class="dot"></span>`:""}</button>`).join("");
 }
 function renderOverlay(){
   const layer=document.getElementById("layer"),R=S.main.reveal;

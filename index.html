@@ -294,7 +294,16 @@ const inGame=g=>ids().filter(id=>!isOut(id,g));
 const kPlayers=()=>{const k=K();return (k.players&&k.players.length?k.players:ids()).filter(id=>S.main.players[id])};
 const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer",pict:"Pictionary",sab:"Sabotage"};
 const accThisRound=()=>{const kp=kPlayers();return S.acc.filter(a=>a.round===K().round&&kp.includes(a.id))};
-const hotThisQ=()=>{const c=S.main.current;return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]&&!isOut(h.id,"hot")&&!isOut(h.pick,"hot")):[]};
+/* ===== rooms: the TV room (main) is always on; an optional side room plays Dares & Hot Seat on phones ===== */
+const sideOpen=()=>!!(S.main&&S.main.side&&S.main.side.open);
+const roomOf=id=>sideOpen()&&S.main.players[id]&&S.main.players[id].room==="side"?"side":"main";
+const myRoom=()=>ME&&S.main&&S.main.players[ME]?roomOf(ME):"main";
+const members=r=>ids().filter(id=>roomOf(id)===r);
+const inRoom=(g,r)=>inGame(g).filter(id=>roomOf(id)===(r||"main"));
+const pictPlayers=()=>inRoom("pict","main");
+const CUR=r=>r==="side"?"side.current":"current";
+const curOf=r=>r==="side"?((S.main.side||{}).current||null):S.main.current;
+const hotThisQ=(r="main")=>{const c=curOf(r);return c&&c.type==="hot"?S.hot.filter(h=>h.qid===c.qid&&S.main.players[h.id]&&roomOf(h.id)===r&&!isOut(h.id,"hot")&&!isOut(h.pick,"hot")):[]};
 function level(){const L=S.main.dareLevel||"auto";if(L!=="auto")return L;const d=new Date(),h=d.getHours(),t=(h<12?h+24:h)*60+d.getMinutes();return t<23*60+30?"mild":t<25*60?"spicy":"unhinged"}
 
 /* ================= db writes ================= */
@@ -308,13 +317,21 @@ async function join(name){
 }
 function claim(id){ME=id;ls.set("gs-me-"+PARTY_ID,id);ui.tab="live";render()}
 
+/* ===== what's on now: every phone and the TV follow this ===== */
+const FOCUS={dares:{tab:"live",name:"Dares & Hot Seat"},killer:{tab:"killer",name:"Who's the Killer"},pict:{tab:"pict",name:"Pictionary"},vote:{tab:"vote",name:"Costume awards"},board:{tab:"board",name:"the Leaderboard"}};
+const focusNow=()=>(S.main&&S.main.focus)||null;
+const mkFocus=g=>({g,at:Date.now()});
+/* autopilot may only take the spotlight from games that aren't mid-moment */
+function autoFocusOk(){const f=focusNow();if(!f||["dares","board"].includes(f.g))return true;
+  if(f.g==="pict"&&pictActive())return false;if(f.g==="killer"&&K().status==="accusing")return false;if(f.g==="vote"&&S.main.reveal&&!S.main.reveal.done)return false;
+  return Date.now()-f.at>3*60000}
 function planReveal(){
   const res=activeCats().map(c=>{const t={};
     S.ballots.forEach(b=>{if(!S.main.players[b.id])return;const bal=unseal(b.s,{});const id=bal[c.id];if(id&&S.main.players[id]&&id!==b.id)t[id]=(t[id]||0)+1});
     const rank=Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v);const top=rank.length?rank[0].v:0;
     return {id:c.id,label:c.label,pts:c.pts,rank,win:rank.filter(x=>x.v===top&&top>0).map(x=>x.id)}});
   res.sort((a,b)=>(a.id==="best")-(b.id==="best"));
-  const now=Date.now(),o={reveal:{results:res,step:0,done:false,nonce:now,stepAt:now}},add={};
+  const now=Date.now(),o={reveal:{results:res,step:0,done:false,nonce:now,stepAt:now},focus:mkFocus("vote")},add={};
   res.forEach(r=>r.win.forEach(id=>{add[id]=(add[id]||0)+r.pts}));
   Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
   return o;
@@ -324,7 +341,7 @@ function buildRoles(){
   const all=shuffle(inGame("killer"));if(all.length<4)return null;
   const n=Math.min(S.main.killerCount||1,Math.max(1,Math.floor(all.length/3))),killers=all.slice(0,n),ms=shuffle(METHODS),round=(K().round||0)+1;
   const roles=all.map(id=>{const ki=killers.indexOf(id);return [id,{round,s:seal(ki>=0?{k:true,m:ms[ki],partners:killers.filter(x=>x!==id)}:{k:false})}]});
-  return {roles,o:{killer:{status:"live",round,players:all,seen:[],dead:[],result:null,at:Date.now()}}};
+  return {roles,o:{killer:{status:"live",round,players:all,seen:[],dead:[],result:null,at:Date.now()},focus:mkFocus("killer")}};
 }
 const sigK=d=>d.killer?d.killer.status+":"+d.killer.round:"";
 async function hostAssign(){const r=buildRoles();if(!r){toast("Need at least 4 guests playing Killer");return}
@@ -338,32 +355,33 @@ async function planUnmask(){
   const right=acc.filter(a=>killers.includes(a.pick)&&!killers.includes(a.id)).map(a=>a.id);
   const add={};right.forEach(id=>add[id]=(add[id]||0)+3);
   const bodies=(k.dead||[]).length;killers.forEach(id=>add[id]=(add[id]||0)+2*bodies+(caught?0:5));
-  const o={"killer.status":"revealed","killer.at":Date.now(),"killer.result":{killers,top:topIds,caught,right,bodies,tally:t,round:k.round,nonce:Date.now()}};
+  const o={focus:mkFocus("killer"),"killer.status":"revealed","killer.at":Date.now(),"killer.result":{killers,top:topIds,caught,right,bodies,tally:t,round:k.round,nonce:Date.now()}};
   Object.entries(add).forEach(([id,n])=>{if(n)o["points."+id]=FV.increment(n)});
   return o;
 }
 async function hostUnmask(){const exp=sigK(S.main);const o=await planUnmask();if(o)return guarded(sigK,o,unmaskLog(o),exp)}
-function planDare(){
-  const all=inGame("dares");if(all.length<2)return null;
+function planDare(r="main"){
+  const all=inRoom("dares",r);if(all.length<2)return null;
   const lv=level(),pool=DARES[lv],usedAll=S.main.dareUsed||{};let used=(usedAll[lv]||[]).filter(i=>i<pool.length);if(used.length>=pool.length)used=[];
   const idx=shuffle(pool.map((_,i)=>i).filter(i=>!used.includes(i)))[0];
-  const dc=S.main.dareCount||{},cur=S.main.current,min=Math.min(...all.map(id=>dc[id]||0));
+  const dc=S.main.dareCount||{},cur=curOf(r),min=Math.min(...all.map(id=>dc[id]||0));
   const cand=all.filter(id=>(dc[id]||0)===min&&!(cur&&cur.pid===id));
   const pid=rnd(cand.length?cand:all),o=rnd(all.filter(id=>id!==pid));
-  return {current:{type:"dare",pid,lvl:lv,text:pool[idx].replace(/\{o\}/g,nm(o)),at:Date.now()},["dareCount."+pid]:FV.increment(1),["dareUsed."+lv]:used.concat(idx)};
+  return {[CUR(r)]:{type:"dare",pid,lvl:lv,text:pool[idx].replace(/\{o\}/g,nm(o)),at:Date.now()},["dareCount."+pid]:FV.increment(1),["dareUsed."+lv]:used.concat(idx)};
 }
-function planHot(){if(inGame("hot").length<3)return null;
+function planHot(r="main"){if(inRoom("hot",r).length<3)return null;
   let used=(S.main.hotUsed||[]).filter(i=>i<HOT.length);if(used.length>=HOT.length)used=[];
   const i=rnd(HOT.map((_,i)=>i).filter(i=>!used.includes(i)));
-  return {current:{type:"hot",q:HOT[i],qid:"q"+Date.now(),win:null,at:Date.now()},hotUsed:used.concat(i)}}
-function planHotReveal(){const c=S.main.current;if(!c||c.type!=="hot"||c.win)return null;const t={};hotThisQ().forEach(h=>{t[h.pick]=(t[h.pick]||0)+1});
+  return {[CUR(r)]:{type:"hot",q:HOT[i],qid:"q"+Date.now()+r,win:null,at:Date.now()},hotUsed:used.concat(i)}}
+function planHotReveal(r="main"){const c=curOf(r);if(!c||c.type!=="hot"||c.win)return null;const t={};hotThisQ(r).forEach(h=>{t[h.pick]=(t[h.pick]||0)+1});
   const top=Math.max(0,...Object.values(t)),win=Object.keys(t).filter(id=>t[id]===top&&top>0);
-  const o={"current.win":win,"current.tally":Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v).slice(0,5)};
+  const o={[CUR(r)+".win"]:win,[CUR(r)+".tally"]:Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v).slice(0,5)};
   win.forEach(id=>o["titles."+id]=FV.arrayUnion(c.q));return o}
-function planNext(){const c=S.main.current;return c&&c.type==="dare"?(planHot()||planDare()):(planDare()||planHot())}
-const sigC=d=>d.current?String(d.current.at)+(d.current.win?"w":"")+(d.current.done||""):"none";
-function hostDraw(){const o=planDare();if(!o){toast("Need at least 2 guests playing Dares");return}return adv(o)}
-function hostHot(){const o=planHot();if(!o){toast("Need at least 3 guests playing Hot Seat");return}return adv(o)}
+function planNext(r="main"){const c=curOf(r);return c&&c.type==="dare"?(planHot(r)||planDare(r)):(planDare(r)||planHot(r))}
+const sigCr=r=>d=>{const c=r==="side"?((d.side||{}).current):d.current;return c?String(c.at)+(c.win?"w":"")+(c.done||""):"none"};
+const sigC=sigCr("main");
+function hostDraw(){const o=planDare();if(!o){toast("Need at least 2 guests playing Dares");return}return adv(o,true)}
+function hostHot(){const o=planHot();if(!o){toast("Need at least 3 guests playing Hot Seat");return}return adv(o,true)}
 function hostHotReveal(){const o=planHotReveal();if(o)return adv(o)}
 /* Writes only if the party is still in the state the change was planned from, so two phones can't double-advance. */
 function guarded(sig,o,extra,expected){const exp=expected!==undefined?expected:sig(S.main);
@@ -385,11 +403,14 @@ async function autoTick(){
       await guarded(d=>d.reveal?d.reveal.step+":"+d.reveal.nonce+":"+d.reveal.done:"",last?{"reveal.done":true}:{"reveal.step":R.step+1,"reveal.stepAt":now})}return}
     const c=m.current;
     if(pictActive()){}
-    else if(c&&c.type==="hot"&&!c.win){const N=inGame("hot").length,n=hotThisQ().length;if((N&&n>=N)||now-c.at>90000){const o=planHotReveal();if(o)await adv(o)}}
+    else if(c&&c.type==="hot"&&!c.win){const N=inRoom("hot","main").length,n=hotThisQ().length;if((N&&n>=N)||now-c.at>90000){const o=planHotReveal();if(o)await adv(o)}}
     else if(!c||now-c.at>A.every*60000){const o=planNext();if(o)await adv(o)}
+    if(sideOpen()){const sc=curOf("side");
+      if(sc&&sc.type==="hot"&&!sc.win){const N=inRoom("hot","side").length,n=hotThisQ("side").length;if((N&&n>=N)||now-sc.at>90000){const o=planHotReveal("side");if(o)await adv(o,false,"side")}}
+      else if(!sc||now-sc.at>A.every*60000){const o=planNext("side");if(o)await adv(o,false,"side")}}
     if(A.killer){const k=K(),kp=kPlayers();
       if(k.status==="live"){const alive=kp.filter(id=>!(k.dead||[]).some(x=>x.id===id)).length;
-        if(alive<=Math.max((m.killerCount||1)+2,Math.ceil(kp.length/2))||now-(k.at||now)>40*60000)await guarded(sigK,{"killer.status":"accusing","killer.at":now})}
+        if(alive<=Math.max((m.killerCount||1)+2,Math.ceil(kp.length/2))||now-(k.at||now)>40*60000)await guarded(sigK,{"killer.status":"accusing","killer.at":now,focus:mkFocus("killer")})}
       else if(k.status==="accusing"){if(accThisRound().length>=kp.length||now-(k.at||now)>4*60000){const exp=sigK(m),o=await planUnmask();if(o)await guarded(sigK,o,unmaskLog(o),exp)}}
       else if(k.status==="revealed"&&now-(k.at||now)>10*60000){const r=buildRoles();if(r)await guarded(sigK,r.o,t=>r.roles.forEach(([id,d])=>t.set(PARTY.collection("roles").doc(id),d)))}
     }
@@ -407,7 +428,7 @@ async function hostReset(keepGuests){
 const hold=(act,label,cls="",hint="Hold to confirm",dis=false)=>`<button class="btn hold ${cls}" data-hold="${act}" ${dis?"disabled":""}>${label}<span class="hint">${hint}</span></button>`;
 function chips(list,act,{sel,dead=[],tag,extra=""}={}){return `<div class="chips">${list.map(id=>`<button class="chip ${dead.includes(id)?"dead":""}" data-act="${act}" data-id="${id}" ${extra} aria-pressed="${Array.isArray(sel)?sel.includes(id):sel===id}"><span>${esc(nm(id))}</span>${tag&&tag(id)?`<span class="tag">${tag(id)}</span>`:""}</button>`).join("")}</div>`}
 function meter(n,N,label){return `<div class="panel stack"><div class="meter"><span class="big">${n}</span><span class="muted">of ${N} ${label}</span></div><div class="bar"><i style="width:${N?Math.min(100,n/N*100):0}%"></i></div></div>`}
-const hostBox=(inner)=>IS_HOST?`<div class="panel host stack" style="margin-top:18px"><div class="award">Host controls</div>${inner}</div>`:"";
+const hostBox=(inner)=>IS_HOST?`<div class="panel host stack" style="margin-top:18px"><div class="award">Host controls</div>${inner}<div style="border-top:1px solid var(--stone);padding-top:12px" class="stack">${focusSeg()}</div></div>`:"";
 function optRow(g,note=""){const out=isOut(ME,g);return `<div class="panel" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="min-width:0"><b>${GAMES[g]}</b><span class="muted" style="display:block;font-size:14px">${out?"You're sitting out.":"You're in."}${note?" "+note:""}</span></span><button class="btn ${out?"":"ghost"}" style="width:auto;flex:0 0 auto;padding:10px 14px;font-size:15px" data-act="opt" data-g="${g}">${out?"Jump back in":"Sit out"}</button></div>`}
 const crowdBox=(inner)=>IS_HOST?hostBox(inner):AUTO().on?`<div class="panel stack" style="margin-top:18px"><div class="award">Anyone can run this</div>${inner}</div>`:"";
 function nextIn(){const c=S.main.current,A=AUTO();if(!A.on)return"";if(c&&c.type==="hot"&&!c.win)return"Results show once everyone votes.";const left=c?Math.max(0,Math.ceil((c.at+A.every*60000-Date.now())/60000)):0;return left?`Next round in about ${left} min.`:"Next round any second."}
@@ -478,16 +499,20 @@ function vKiller(){
   }
   return `<h2>Unmasked</h2>${k.result?killerResult(k.result):""}${graveyard}${optRow("killer")}${crowdBox((AUTO().on&&AUTO().killer?`<p class="muted" style="margin:0">A new round starts automatically 10 minutes after the unmask.</p>`:"")+hold("killreset","New round of Killer","ghost","Hold 1.3s · new secret roles"))}`;
 }
+function roomPanel(R){const sm=members("side");
+  if(!sideOpen())return `<div class="panel" style="margin-bottom:12px;display:flex;gap:12px;align-items:center;justify-content:space-between"><span class="muted" style="font-size:14px;min-width:0">Splitting up? Start a side room for Dares &amp; Hot Seat on phones. The TV room keeps going.</span><button class="btn ghost" style="width:auto;flex:0 0 auto;padding:10px 14px;font-size:15px" data-act="openside">Start side room</button></div>`;
+  if(R==="side")return `<div class="panel" style="margin-bottom:12px;border-color:#9b7bd4"><div class="award" style="color:#9b7bd4">🚪 Side room</div><p style="margin:4px 0 10px">${sm.map(id=>esc(nm(id))).join(", ")}</p><button class="btn ghost" data-act="leaveside">Back to the TV room</button>${sm.length<=1?`<p class="muted" style="margin:8px 0 0;font-size:14px">You're the last one here. Leaving closes the side room.</p>`:""}</div>`;
+  return `<div class="panel" style="margin-bottom:12px;display:flex;gap:12px;align-items:center;justify-content:space-between"><span style="min-width:0"><span class="award" style="color:#9b7bd4">🚪 Side room is open</span><span class="muted" style="display:block;font-size:14px">${sm.length?sm.map(id=>esc(nm(id))).join(", "):"Nobody in it yet"}</span></span><button class="btn ghost" style="width:auto;flex:0 0 auto;padding:10px 14px;font-size:15px" data-act="joinside">Join</button></div>`}
 function vLive(){
-  const c=S.main.current,lv=level();let card;
+  const R=myRoom(),c=curOf(R),lv=level();let card;
   if(!c)card=`<div class="card"><div class="award" style="text-align:left">Nothing happening… yet</div><div class="what muted">Dares and Hot Seat questions show up here. Keep your phone handy.</div></div>`;
   else if(c.type==="dare")card=`<div class="card ${c.pid===ME?"you":""}"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${c.pid===ME?"YOU, "+esc(nm(c.pid)).toUpperCase():esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div>${c.done?`<div class="award" style="text-align:left;color:var(--moss)">${c.done==="did"?"✓ Done · +1":"🐔 Chickened out · drink 2"}</div>`:""}</div>
     ${c.pid===ME&&!c.done?`<div class="row" style="margin-top:12px"><button class="btn" data-act="selfdid">I did it · +1</button><button class="btn ghost" data-act="selfchicken">I chickened out</button></div>`:""}`;
-  else{const mine=S.hot.find(h=>h.id===ME&&h.qid===c.qid),n=hotThisQ().length,N=inGame("hot").length,hOut=isOut(ME,"hot");
+  else{const mine=S.hot.find(h=>h.id===ME&&h.qid===c.qid),n=hotThisQ(R).length,N=inRoom("hot",R).length,hOut=isOut(ME,"hot");
     card=`<div class="card"><div class="award" style="text-align:left">Hot seat · who's most likely to…</div><div class="what" style="font-size:26px">${esc(c.q)}?</div>
       ${c.win?`<div class="who">${c.win.length?c.win.map(id=>esc(nm(id))).join(" & "):"Nobody voted"}</div>${c.win.length?`<p style="margin:0">${c.win.includes(ME)?"That's you. Drink up.":"Drink up, and the title is yours."}</p>`:""}<div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="runners">${n} of ${N} voted</div>`}</div>
-      ${c.win||hOut?"":`<h3>${mine&&!isOut(mine.pick,"hot")?"You picked "+esc(nm(mine.pick))+". Tap to change.":"Tap your pick"}</h3>${chips(inGame("hot"),"hotpick",{sel:mine&&mine.pick})}`}`}
-  const host=IS_HOST?hostBox(`<div class="seg">${["auto","mild","spicy","unhinged"].map(l=>`<button data-act="lvl" data-l="${l}" aria-pressed="${(S.main.dareLevel||"auto")===l}">${l==="auto"?"Auto ("+LVL[lv]+")":LVL[l]}</button>`).join("")}</div>
+      ${c.win||hOut?"":`<h3>${mine&&!isOut(mine.pick,"hot")?"You picked "+esc(nm(mine.pick))+". Tap to change.":"Tap your pick"}</h3>${chips(inRoom("hot",R),"hotpick",{sel:mine&&mine.pick})}`}`}
+  const host=IS_HOST&&R==="main"?hostBox(`<div class="seg">${["auto","mild","spicy","unhinged"].map(l=>`<button data-act="lvl" data-l="${l}" aria-pressed="${(S.main.dareLevel||"auto")===l}">${l==="auto"?"Auto ("+LVL[lv]+")":LVL[l]}</button>`).join("")}</div>
     <p class="muted" style="margin:0;font-size:14px">Auto gets nastier through the night: warm-up until 11:30, spicy until 1, then unhinged.${AUTO().on?" Autopilot is on. "+nextIn():""}</p>
     ${c&&c.type==="dare"?`<div class="row"><button class="btn" data-act="daredone">Did it · +1</button><button class="btn ghost" data-act="darechicken">Chickened out</button></div>`:""}
     <button class="btn ${c&&c.type==="dare"?"ghost":""}" data-act="draw">${c&&c.type==="dare"?"Skip · new dare":"Draw a dare"}</button>
@@ -495,11 +520,15 @@ function vLive(){
     <button class="btn ${c&&c.type==="hot"&&!c.win?"ghost":""}" data-act="hotnew">${c&&c.type==="hot"?"Next hot-seat question":"Ask a hot-seat question"}</button>
     ${c?`<button class="btn ghost" data-act="clearcur">Clear the screen</button>`:""}`):"";
   const A=AUTO(),age=c?Date.now()-c.at:1e9;
-  const crowd=!IS_HOST&&A.on?`<p class="muted" style="margin:12px 0 0;font-size:14px">${nextIn()}</p><div style="height:10px"></div><button class="btn ghost" data-act="skipnext" ${age<20000?"disabled":""}>Skip to the next one</button>`:"";
+  const sideCtl=R==="side"?`<div class="panel stack" style="margin-top:14px"><div class="award">Side room controls · anyone can</div>
+    ${c&&c.type==="hot"&&!c.win?`<button class="btn red" data-act="shotreveal" ${hotThisQ("side").length?"":"disabled"}>Reveal hot-seat results</button>`:""}
+    <div class="row"><button class="btn ${c&&c.type==="dare"&&!c.done?"ghost":""}" data-act="sdraw">${c&&c.type==="dare"?"New dare":"Draw a dare"}</button><button class="btn ghost" data-act="shot">Hot-seat question</button></div>
+    ${A.on?`<p class="muted" style="margin:0;font-size:14px">Autopilot also runs this room.</p>`:""}</div>`:"";
+  const crowd=!IS_HOST&&A.on&&R==="main"?`<p class="muted" style="margin:12px 0 0;font-size:14px">${nextIn()}</p><div style="height:10px"></div><button class="btn ghost" data-act="skipnext" ${age<20000?"disabled":""}>Skip to the next one</button>`:"";
   const E=S.main.event,evb=E&&Date.now()-E.at<120000?`<div class="panel" style="border-color:var(--blood);margin-bottom:12px"><div class="award" style="color:var(--blood)">Sabotage</div><b>${esc(E.text)}</b></div>`:"";
   const hx=hexOf(ME),hexb=hx?`<div class="panel" style="border-color:#9b7bd4;margin-bottom:12px"><div class="award" style="color:#9b7bd4">🕸 You're hexed</div><b>${esc(hx.text)}</b><p class="muted" style="margin:0;font-size:14px">Wears off in <b data-ends="${hx.until}"></b>.</p></div>`:"";
-  if(pictActive())return `<h2>Now playing</h2>${hexb}${evb}<div class="card"><div class="award" style="text-align:left">Pictionary is on</div><div class="what">Everything else is paused until it's over.</div></div><div style="height:12px"></div><button class="btn" data-act="tab" data-tab="pict">Go to Pictionary</button>${host}`;
-  return `<h2>Now playing</h2>${hexb}${evb}${card}${crowd}${optRow("dares")}${optRow("hot")}${host}`;
+  if(pictActive()&&R==="main")return `<h2>Now playing</h2>${roomPanel(R)}${hexb}${evb}<div class="card"><div class="award" style="text-align:left">Pictionary is on</div><div class="what">Everything else is paused until it's over.</div></div><div style="height:12px"></div><button class="btn" data-act="tab" data-tab="pict">Go to Pictionary</button>${host}`;
+  return `<h2>${R==="side"?"Side room":"Now playing"}</h2>${roomPanel(R)}${hexb}${evb}${card}${crowd}${sideCtl}${optRow("dares")}${optRow("hot")}${host}`;
 }
 function ranked(){const pts=S.main.points||{},t=S.main.titles||{};return ids().map(id=>({id,pts:pts[id]||0,t:(t[id]||[]).length})).sort((a,b)=>b.pts-a.pts||nm(a.id).localeCompare(nm(b.id)))}
 function lbHtml(edit,lim){const r=ranked().slice(0,lim||999),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
@@ -522,33 +551,62 @@ function awardsPanel(){const A=AUTO(),W=S.main.awards,opts=[["off","Off"],["01:0
   return `<label class="toggle" for="au-awards" style="border:none;padding:0"><span>Hand out awards at<span class="muted" style="display:block;font-size:14px">Runs on its own, even with autopilot off.</span></span><select id="au-awards">${opts.map(([v,l])=>`<option value="${v}" ${A.awardsAt===v?"selected":""}>${l}</option>`).join("")}</select></label>
   ${W?hold("awreplay","Replay the awards","ghost","Hold 1.3s · plays on every screen again"):hold("awnow","Hand out the awards now","","Hold 1.3s · plays on every screen")}
   <p class="muted" style="margin:0;font-size:14px">Morning-after recap, to share tomorrow:</p><div class="mono">${esc(joinUrl())}#recap</div>`}
+function focusSeg(){const f=(focusNow()||{}).g;
+  return `<div class="award">On every screen</div><div class="seg">${Object.entries(FOCUS).map(([g,v])=>`<button data-act="setfocus" data-g="${g}" aria-pressed="${f===g}">${g==="dares"?"Dares & Hot Seat":g==="killer"?"Killer":g==="pict"?"Pictionary":g==="vote"?"Costumes":"Leaderboard"}</button>`).join("")}</div>
+  <p class="muted" style="margin:0;font-size:14px">Moves the TV and everyone's phone to that game.</p>`}
 function vHost(){
   const ps=players(),locked=S.ballots.length>0;
   const meIn=ME&&S.main.players[ME];
   return `<h2>Host desk</h2>${meIn?"":`<div class="panel stack" style="margin-bottom:12px"><b>You haven't joined as a player yet</b><p class="muted" style="margin:0">Join with your name to vote, get a Killer role and show up on the board.</p><button class="btn" data-act="tab" data-tab="live">Join the party</button></div>`}
+  <div class="panel host stack" style="margin-bottom:12px">${focusSeg()}</div>
   <div class="panel stack" style="align-items:center;text-align:center"><div class="award">Guests scan to join</div><div class="qr" id="qr" style="width:200px"></div><div class="mono">${esc(joinUrl())}</div>
   <p class="muted" style="margin:0;font-size:14px">On the TV, open the same link with <b style="color:var(--bone)">#tv</b> on the end. On the Pictionary iPad, use <b style="color:var(--bone)">#easel</b>.</p></div>
+  ${sideOpen()?`<h3>Side room</h3><div class="panel stack"><p style="margin:0">${members("side").map(id=>esc(nm(id))).join(", ")||"Nobody in it"}</p>${hold("closeside","Close the side room","ghost","Hold 1.3s · everyone comes back to the TV room")}</div>`:""}
   <h3>Party autopilot</h3><div class="panel">${autoPanel()}</div>
   <h3>Party awards</h3><div class="panel stack">${awardsPanel()}</div>
-  <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}${Object.keys(GAMES).filter(g=>isOut(p.id,g)).length?`<small>Sitting out: ${Object.keys(GAMES).filter(g=>isOut(p.id,g)).map(g=>GAMES[g]).join(", ")}</small>`:""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
+  <h3>Guests (${ps.length})</h3><div class="panel">${ps.length?`<div class="lb">${ps.map(p=>`<div class="r"><span class="n">·</span><span class="nm">${esc(p.name)}${p.id===ME?" <span class=\"muted\">(you)</span>":""}${roomOf(p.id)==="side"?" <span class=\"muted\">🚪</span>":""}${Object.keys(GAMES).filter(g=>isOut(p.id,g)).length?`<small>Sitting out: ${Object.keys(GAMES).filter(g=>isOut(p.id,g)).map(g=>GAMES[g]).join(", ")}</small>`:""}</span><button class="ibtn chip" style="padding:6px 10px" data-act="kick" data-id="${p.id}">Remove</button></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody's joined yet. Put the QR code up.</p>`}</div>
   <h3>Costume awards</h3><div class="panel">${(S.main.cats||[]).map(c=>`<label class="toggle" for="cat-${c.id}"><span><b>${esc(c.label)}</b> <span class="muted">· ${c.pts} pts${c.fixed?" · always on":""}</span></span><input type="checkbox" id="cat-${c.id}" data-cat="${c.id}" ${c.on?"checked":""} ${c.fixed||locked?"disabled":""}></label>`).join("")}${locked?`<p class="muted" style="margin:8px 0 0;font-size:14px">Locked because ballots are already in.</p>`:""}</div>
   <h3>Reset</h3><div class="stack">${hold("resetgames","Reset games, keep guests","ghost","Hold 1.3s · clears votes, points, killer")}${hold("wipe","Wipe everything","red","Hold 1.3s · everyone has to rejoin")}</div>
   <p class="muted" style="margin-top:16px;font-size:14px">Want to play on a second device as host? Open your host link there too.</p>`;
 }
+function sideStrip(){if(!sideOpen())return"";const m=members("side"),c=curOf("side");
+  const what=!c?"hanging out":c.type==="dare"?`${esc(nm(c.pid))} is on a dare`:c.win?`${c.win.map(id=>esc(nm(id))).join(" & ")||"nobody"} got hot-seated`:`hot seat: most likely to ${esc(c.q)}`;
+  return `<div class="stat" style="border-top:1px solid var(--stone);padding-top:10px">🚪 <b style="font-size:1.1em">Side room</b> ${m.length} ${m.length===1?"person":"people"} · ${what}</div>`}
+function tvFrame(sub,right){const N=ids().length;
+  return `<div class="tv"><div class="stack" style="min-width:0"><div class="brand">Graveyard Shift<small>${esc(sub)}</small></div><div class="panel">${N?lbHtml(false,6):`<p class="muted" style="margin:0">Scan the code to join.</p>`}</div>
+  <div class="join"><div class="qr" id="qr"></div><div><div class="award">Join the party</div><p>Scan with your phone camera</p></div></div></div>
+  <div class="stack" style="min-width:0;justify-content:center">${right}${sideStrip()}</div></div>`}
+function vTVKiller(){const k=K(),kp=kPlayers(),dead=k.dead||[];let m;
+  if(k.status==="off")m=`<div class="card"><div class="award">Who's the Killer?</div><div class="what">A round is about to start. Watch your phone for your secret role.</div></div>`;
+  else if(k.status==="live")m=`<div class="card"><div class="award">Who's the Killer? · Round ${k.round}</div><div class="who">${dead.length} dead</div><div class="what">${Math.max(0,kp.length-dead.length)} still breathing. Your secret role is on your phone. Killed? Report it there.</div></div>
+    ${dead.length?`<div class="panel"><div class="lb">${dead.slice(-6).map(d=>`<div class="r"><span class="n">☠</span><span class="nm">${esc(nm(d.id))}</span><span class="pts muted">${clock(d.at)}</span></div>`).join("")}</div></div>`:""}`;
+  else if(k.status==="accusing")m=`<div class="card"><div class="award">Point the finger</div><div class="who">${accThisRound().length}/${kp.length}</div><div class="what">accusations in. Vote for the killer on your phone.</div></div>`;
+  else m=k.result?killerResult(k.result):"";
+  return tvFrame("Who's the Killer?",m)}
+function vTVVote(){const N=ids().length,R=S.main.reveal,A=AUTO();
+  const m=R&&R.done?`<div class="card"><div class="award">Costume winners</div>${R.results.slice().reverse().map(r=>`<div class="what"><span class="muted" style="font-size:.7em">${esc(r.label)}</span><br>${r.win.map(id=>esc(nm(id))).join(" & ")||"No votes"}</div>`).join("")}</div>`
+    :`<div class="card"><div class="award">Costume awards</div><div class="who">${ballotCount()}/${N}</div><div class="what">ballots sealed. Vote on your phone in the Costumes tab.${A.on&&A.revealAt?` Crowns at ${fmtTime(A.revealAt)}.`:""}</div></div>`;
+  return tvFrame("Costume awards",m)}
+function vTVBoard(){const r=ranked(),t=Object.entries(S.main.titles||{}).flatMap(([id,ts])=>(S.main.players[id]?ts:[]).map(q=>({id,q}))).slice(-4).reverse();
+  const m=`<div class="card"><div class="award">Leading the night</div><div class="who">${r[0]&&r[0].pts>0?esc(nm(r[0].id)):"Anyone's game"}</div><div class="what">${r[0]&&r[0].pts>0?r[0].pts+" points":"Nobody has scored yet."}</div></div>
+    ${t.length?`<div class="panel">${t.map(x=>`<p class="stat" style="margin:0 0 6px"><b style="font-size:1em;font-family:var(--f-body)">${esc(nm(x.id))}</b> most likely to ${esc(x.q)}</p>`).join("")}</div>`:""}`;
+  return tvFrame("Leaderboard",m)}
 function vTV(){
-  const PP=PI();if(pictActive()||(PP.status==="done"&&Date.now()-(PP.doneAt||0)<60000))return vTVPict();
+  const F=(focusNow()||{}).g;
+  if(pictActive()||F==="pict")return vTVPict();
+  if(F==="killer")return vTVKiller();
+  if(F==="vote")return vTVVote();
+  if(F==="board")return vTVBoard();
   const N=ids().length,c=S.main.current,k=K();
   let now=`<div class="card"><div class="award" style="text-align:left">Up next</div><div class="what muted">Dares and hot-seat questions appear here.</div></div>`;
   if(c&&c.type==="dare")now=`<div class="card"><span class="lvl ${c.lvl}">${LVL[c.lvl]} dare</span><div class="who">${esc(nm(c.pid))}</div><div class="what">${esc(c.text)}</div></div>`;
-  if(c&&c.type==="hot")now=`<div class="card"><div class="award" style="text-align:left">Who's most likely to…</div><div class="what">${esc(c.q)}?</div>${c.win?`<div class="who">${c.win.map(id=>esc(nm(id))).join(" & ")||"Nobody voted"}</div><div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="stat"><b>${hotThisQ().length}/${inGame("hot").length}</b>voted on their phones</div>`}</div>`;
+  if(c&&c.type==="hot")now=`<div class="card"><div class="award" style="text-align:left">Who's most likely to…</div><div class="what">${esc(c.q)}?</div>${c.win?`<div class="who">${c.win.map(id=>esc(nm(id))).join(" & ")||"Nobody voted"}</div><div class="runners">${(c.tally||[]).map(x=>`${esc(nm(x.id))} ${x.v}`).join(" · ")}</div>`:`<div class="stat"><b>${hotThisQ().length}/${inRoom("hot","main").length}</b>voted on their phones</div>`}</div>`;
   let kill="";
   if(k.status==="live")kill=`<div class="stat"><b>${(k.dead||[]).length}</b>☠ ${(k.dead||[]).slice(-4).map(d=>esc(nm(d.id))).join(", ")||"no bodies yet"}</div>`;
   if(k.status==="accusing")kill=`<div class="stat"><b>${accThisRound().length}/${kPlayers().length}</b>accusations in</div>`;
   if(k.status==="revealed"&&k.result)kill=killerResult(k.result);
   const A=AUTO();const votes=S.main.reveal&&S.main.reveal.done?"":`<div class="stat"><b>${ballotCount()}/${N}</b>costume ballots sealed${A.on&&A.revealAt?` · crowns at ${fmtTime(A.revealAt)}`:""}</div>`;
-  return `<div class="tv"><div class="stack" style="min-width:0"><div class="brand">Graveyard Shift<small>Live leaderboard</small></div><div class="panel">${N?lbHtml(false):`<p class="muted" style="margin:0">Scan the code to join.</p>`}</div>
-  <div class="join"><div class="qr" id="qr"></div><div><div class="award">Join the party</div><p>Scan with your phone camera</p></div></div></div>
-  <div class="stack" style="min-width:0;justify-content:center">${now}${votes}${kill}</div></div>`;
+  return tvFrame("Live leaderboard",now+votes+kill);
 }
 
 /* ================= render ================= */
@@ -558,7 +616,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v9</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v11</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -576,6 +634,8 @@ function renderInner(){
   if(!meName&&ui.tab!=="host"){tabs.hidden=!IS_HOST;put(main,vJoin());renderTabs();renderOverlay();return}
   tabs.hidden=false;renderTabs();
   const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null,kv=keep?document.activeElement.value:null;
+  const FO=focusNow();if(FO&&FO.at!==ui.focusSeen){const first=ui.focusSeen===undefined;ui.focusSeen=FO.at;const tab=FOCUS[FO.g]&&FOCUS[FO.g].tab;
+    if(tab&&ui.tab!==tab&&ui.flow!=="editvote"&&!(IS_HOST&&ui.tab==="host"&&!first)&&!(myRoom()==="side"&&["dares","pict"].includes(FO.g))){ui.tab=tab;ui.draft={};ui.accPick=null;if(!first){toast("Everyone's on "+FOCUS[FO.g].name+" now");buzz()}}}
   const PP=PI();if(PP.status==="ready"&&PP.drawer===ME&&ui.autoSw!==PP.turn){ui.autoSw=PP.turn;ui.tab="pict";buzz()}
   const EV=S.main.event;if(EV&&EV.target===ME&&ui.evBuzz!==EV.at&&Date.now()-EV.at<60000){ui.evBuzz=EV.at;buzz();toast("😈 You've been sabotaged!")}
   const v={live:vLive,vote:vVote,killer:vKiller,pict:vPict,board:vBoard,host:vHost,recap:vRecap}[ui.tab]||vLive;
@@ -611,9 +671,11 @@ function runCountdown(key){if(ui.revealShown===key||cdKey===key)return;cdKey=key
 /* ================= event log ================= */
 const logT=(t,o)=>t.set(PARTY.collection("log").doc(),Object.assign({at:Date.now()},o));
 const addLog=o=>PARTY.collection("log").add(Object.assign({at:Date.now()},o)).catch(()=>{});
-function adv(o){const q=S.main.current&&S.main.current.q;return guarded(sigC,o,t=>{
-  if(o.current&&o.current.type==="dare")logT(t,{type:"dared",pid:o.current.pid,text:o.current.text});
-  if(o["current.win"]&&o["current.win"].length)logT(t,{type:"hot",win:o["current.win"],q});
+function adv(o,byPerson,r="main"){const C=CUR(r),nc=o[C],win=o[C+".win"],q=curOf(r)&&curOf(r).q;
+  if(nc&&r==="main"&&(byPerson||autoFocusOk()))o.focus=mkFocus("dares");
+  return guarded(sigCr(r),o,t=>{
+  if(nc&&nc.type==="dare")logT(t,{type:"dared",pid:nc.pid,text:nc.text});
+  if(win&&win.length)logT(t,{type:"hot",win,q});
 })}
 function revealWrite(){const o=planReveal();return guarded(d=>JSON.stringify(d.reveal||null),o,t=>logT(t,{type:"costume",results:o.reveal.results}))}
 const unmaskLog=o=>t=>logT(t,Object.assign({type:"killer"},o["killer.result"]));
@@ -633,7 +695,7 @@ const pictActive=()=>["ready","drawing","reveal"].includes(PI().status);
 const easelOn=()=>Date.now()-((S.main&&S.main.easelSeen)||0)<90000;
 const iDraw=p=>EASEL?true:(MODE==="phone"&&p.drawer===ME&&!easelOn());
 const readyLimit=()=>easelOn()?90000:40000;
-function nextArtist(p){const o=p.order||[];for(let i=(p.idx||0)+1;i<o.length;i++)if(S.main.players[o[i]]&&!isOut(o[i],"pict"))return o[i];const extra=inGame("pict").find(id=>!o.includes(id));return extra||null}
+function nextArtist(p){const o=p.order||[];for(let i=(p.idx||0)+1;i<o.length;i++)if(S.main.players[o[i]]&&!isOut(o[i],"pict")&&roomOf(o[i])==="main")return o[i];const extra=pictPlayers().find(id=>!o.includes(id));return extra||null}
 const sigP=d=>d.pict?(d.pict.status+":"+(d.pict.turn||"")+":"+(d.pict.game||0)):"off:0";
 const showWord=w=>String(w||"").split("|")[0];
 const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -644,12 +706,12 @@ function pickWord(){const deck=S.main.pictDeck||"mix",pool=deck==="mix"?PICT.hau
   let used=(S.main.pictUsed||[]).filter(w=>pool.includes(w));if(used.length>=pool.length)used=[];const w=rnd(pool.filter(x=>!used.includes(x)));return {w,used:used.concat(w)}}
 function readyFields(order,idx){const pk=pickWord(),turn="t"+Date.now()+Math.random().toString(36).slice(2,5);
   return {turn,o:{"pict.status":"ready","pict.order":order,"pict.idx":idx,"pict.drawer":order[idx],"pict.w":seal(pk.w),"pict.turn":turn,"pict.readyAt":Date.now(),"pict.passes":0,pictUsed:pk.used}}}
-function nextDrawerPlan(p){const base=p.order||[],order=base.concat(inGame("pict").filter(id=>!base.includes(id)));
-  for(let i=(p.idx==null?-1:p.idx)+1;i<order.length;i++){const id=order[i];if(S.main.players[id]&&!isOut(id,"pict"))return readyFields(order,i)}
+function nextDrawerPlan(p){const base=p.order||[],order=base.concat(pictPlayers().filter(id=>!base.includes(id)));
+  for(let i=(p.idx==null?-1:p.idx)+1;i<order.length;i++){const id=order[i];if(S.main.players[id]&&!isOut(id,"pict")&&roomOf(id)==="main")return readyFields(order,i)}
   return {turn:null,o:{"pict.status":"done","pict.doneAt":Date.now(),"pict.order":order}}}
 function writeTurn(plan){return guarded(sigP,plan.o,plan.turn?t=>t.set(PARTY.collection("draw").doc("live"),{turn:plan.turn,s:[]}):null)}
-function startPict(){if(pictActive())return;const ps=shuffle(inGame("pict"));if(ps.length<3){toast("Need at least 3 players in Pictionary");return}
-  const r=readyFields(ps,0),o={pict:{status:"ready",game:(PI().game||0)+1,order:ps,idx:0,drawer:ps[0],w:r.o["pict.w"],turn:r.turn,readyAt:Date.now(),passes:0,results:{},last:null},pictUsed:r.o.pictUsed};
+function startPict(){if(pictActive())return;const ps=shuffle(pictPlayers());if(ps.length<3){toast("Need at least 3 players in Pictionary");return}
+  const r=readyFields(ps,0),o={focus:mkFocus("pict"),pict:{status:"ready",game:(PI().game||0)+1,order:ps,idx:0,drawer:ps[0],w:r.o["pict.w"],turn:r.turn,readyAt:Date.now(),passes:0,results:{},last:null},pictUsed:r.o.pictUsed};
   return writeTurn({turn:r.turn,o})}
 function turnStrokes(p){if(iDraw(p)&&ui.pturn===p.turn)return ui.strokes||[];return S.draw&&S.draw.turn===p.turn?S.draw.s||[]:[]}
 function phoneOk(p){return S.pg.filter(g=>g.turn===p.turn&&g.ok&&g.id!==p.drawer&&S.main.players[g.id]).sort((a,b)=>a.okAt-b.okAt).map(g=>g.id)}
@@ -659,7 +721,7 @@ function finishPlan(p,verbal,failed){
   okList.forEach((id,i)=>add[id]=(add[id]||0)+(i===0?3:i===1?2:1));if(okList.length)add[p.drawer]=(add[p.drawer]||0)+Math.min(3,okList.length);
   Object.entries(add).forEach(([id,n])=>{o["points."+id]=FV.increment(n);o["pict.results."+id]=FV.increment(n)});
   const s=turnStrokes(p);return {o,extra:t=>logT(t,{type:"pict",drawer:p.drawer,word,correct:okList,s})}}
-function pictGuessers(p){return inGame("pict").filter(id=>id!==p.drawer)}
+function pictGuessers(p){return pictPlayers().filter(id=>id!==p.drawer)}
 let pticking=false;
 async function alwaysTick(){if(!S.main||pticking||!PARTY)return;pticking=true;try{
   const p=PI(),now=Date.now();
@@ -727,7 +789,7 @@ function gotPanel(p){const ph=phoneOk(p),got=(ui.got||[]).filter(id=>!ph.include
   ${gs.length?chips(gs,"pgot",{sel:order,tag}):""}
   <div class="row"><button class="btn" data-act="pconfirm" ${order.length?"":"disabled"}>${order.length?`Done · ${order.length} got it`:"Pick who got it"}</button><button class="btn red" data-act="pfail">Nobody got it</button></div>
   <button class="btn ghost" data-act="ppass">New word</button></div>`}
-function vEasel(){const p=PI(),N=inGame("pict").length,ended=hold("pictend","End Pictionary","ghost","Hold 1.3s");
+function vEasel(){const p=PI(),N=pictPlayers().length,ended=hold("pictend","End Pictionary","ghost","Hold 1.3s");
   if(p.status==="off"||p.status==="done")return `<div class="easel"><h2>Pictionary station</h2>${p.status==="done"&&p.game?`<div class="panel stack" style="margin-bottom:14px"><div class="award">Last game</div>${pictTally(p)}</div>`:""}
     <p class="muted">Leave this iPad where people can grab it. When it's someone's turn, it calls their name. Everyone else guesses on their phones.</p>
     <h3>Word deck</h3>${deckSeg()}<div style="height:14px"></div>${hold("pictstart",p.game?"Play again":"Start Pictionary","",N<3?"Need at least 3 players":"Hold 1.3s",N<3)}</div>`;
@@ -741,7 +803,7 @@ function vEasel(){const p=PI(),N=inGame("pict").length,ended=hold("pictend","End
   return `<div class="easel stack" style="text-align:center"><div class="award">It was</div><div class="winner">${esc(L.word||"")}</div><p style="font-size:20px;margin:0">${(L.correct||[]).length?(L.correct||[]).map(id=>esc(nm(id))).join(", ")+" got it":"Nobody got it."}</p>
     <p class="muted" style="font-size:18px">${nx?"Next up: "+esc(nm(nx))+". Get ready to grab the iPad.":"That was the last drawing."}</p></div>`}
 function vPict(){
-  const p=PI(),N=inGame("pict").length,out=isOut(ME,"pict"),endBtn=`<div style="height:18px"></div>${hold("pictend","End Pictionary","ghost","Hold 1.3s · anyone can")}`;
+  const p=PI(),N=pictPlayers().length,out=isOut(ME,"pict"),endBtn=`<div style="height:18px"></div>${hold("pictend","End Pictionary","ghost","Hold 1.3s · anyone can")}`;
   if(p.status==="off"||p.status==="done")return `<h2>Haunted Pictionary</h2>${p.status==="done"&&p.game?`<div class="panel stack" style="margin-bottom:12px"><div class="award">Last game</div>${pictTally(p)}</div>`:""}${pictRules()}
     <div class="panel" style="margin-top:12px"><p class="muted" style="margin:0;font-size:14px">${easelOn()?"✓ The iPad drawing station is on. Artists draw on the iPad.":"Want everyone to draw on one iPad? Open <span class=\"mono\">"+esc(joinUrl())+"#easel</span> on it."}</p></div>
     <h3>Word deck</h3>${deckSeg()}<div style="height:14px"></div>${hold("pictstart",p.game?"Play again":"Start Pictionary","",N<3?"Need at least 3 players":"Hold 1.3s · anyone can start it",N<3)}${optRow("pict")}`;
@@ -774,7 +836,7 @@ function vTVPict(){const p=PI();
   else if(p.status==="reveal"){const L=p.last||{};top=`<div class="award">It was</div><div class="who">${esc(L.word||"")}</div>`;side=`<div class="stat">${(L.correct||[]).length?(L.correct||[]).map(id=>esc(nm(id))).join(", ")+" got it":"Nobody got it. Brutal."}</div>`}
   else{top=`<div class="award">Pictionary · final scores</div>`;side=`<div class="panel">${pictTally(p)}</div>`}
   return `<div class="tv tvp"><div class="stack" style="min-width:0"><div class="brand">Haunted Pictionary<small>Game ${p.game||1}</small></div>${top}<div class="board-slot" data-slot="live"></div></div>
-  <div class="stack" style="min-width:0;justify-content:center">${side}<div class="panel">${lbHtml(false,6)}</div></div></div>`}
+  <div class="stack" style="min-width:0;justify-content:center">${side}<div class="panel">${lbHtml(false,6)}</div>${sideStrip()}</div></div>`}
 
 /* ================= sabotage ================= */
 const SABS={drink:{label:"Drink Curse",cost:2,desc:"They drink twice. The TV announces it."},dare:{label:"Dare Bomb",cost:3,desc:"They get a nasty dare on the big screen, right now."},
@@ -797,10 +859,10 @@ async function doSab(kind,target){const K0=SABS[kind];if(!K0||!target||target===
       if(kind==="heist"){const st=Math.min(3,Math.max(0,pts[target]||0));o["points."+target]=FV.increment(-st);o["points."+ME]=FV.increment(st-K0.cost);
         text=st?`${st} point${st>1?"s":""} stolen from ${tn}.`:`Someone tried to rob ${tn}. They had nothing.`;extra.stolen=st}
       if(kind==="dare"){if(tp.out&&tp.out.dares)return "They're not playing Dares.";
-        if(d.pict&&["ready","drawing","reveal"].includes(d.pict.status))return "Wait until Pictionary is over.";
+        if(!(d.side&&d.side.open&&tp.room==="side")&&d.pict&&["ready","drawing","reveal"].includes(d.pict.status))return "Wait until Pictionary is over.";
         const lv=level()==="mild"?"spicy":level(),others=Object.keys(d.players).filter(id=>id!==target),dare=rnd(DARES[lv]).replace(/\{o\}/g,(d.players[rnd(others)]||{}).name||"someone");
-        o.current={type:"dare",pid:target,lvl:lv,text:dare,at:now,sab:true};o["dareCount."+target]=FV.increment(1);text=`${tn} got Dare Bombed.`;extra.text=dare}
-      o.event={type:"sab",kind,target,text,cost:K0.cost,at:now};
+        const tSide=!!(d.side&&d.side.open&&tp.room==="side");o[tSide?"side.current":"current"]={type:"dare",pid:target,lvl:lv,text:dare,at:now,sab:true};extra.room=tSide?"side":"main";o["dareCount."+target]=FV.increment(1);text=`${tn} got Dare Bombed.`;extra.text=dare}
+      o.event={type:"sab",kind,target,text,cost:K0.cost,at:now};if(kind==="dare"&&extra.room!=="side")o.focus={g:"dares",at:now};
       t.update(PARTY,o);t.set(PARTY.collection("log").doc(),Object.assign({type:"sab",kind,by:ME,target,cost:K0.cost,at:now},extra));return "ok"});
     if(res==="ok"){toast("Sabotage sent 😈");ui.sabTarget=null;render()}else toast(res)}catch(e){err(e)}}
 function sabPanel(){if(isOut(ME,"sab"))return "";
@@ -878,10 +940,11 @@ function vRecap(){const m=S.main,L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),aw
 /* ================= actions ================= */
 const holdActs={
   reveal:hostReveal,assign:hostAssign,unmask:hostUnmask,
-  accuse:()=>guarded(sigK,{"killer.status":"accusing","killer.at":Date.now()}),
+  accuse:()=>guarded(sigK,{"killer.status":"accusing","killer.at":Date.now(),focus:mkFocus("killer")}),
   killreset:hostAssign,
   die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>{addLog({type:"death",pid:ME,round:K().round});toast("Rest in pieces. Take a drink.")})},
   resetgames:()=>hostReset(true),wipe:()=>hostReset(false),
+  closeside:()=>up({"side.open":false}).then(()=>toast("Side room closed. Everyone is back in the TV room.")),
   pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,
   sabgo:()=>doSab(ui.sabKind||"drink",ui.sabTarget),
   awnow:awardsWrite,
@@ -901,17 +964,24 @@ const acts={
   replay(){up({"reveal.done":false,"reveal.step":0,"reveal.nonce":Date.now(),"reveal.stepAt":Date.now()})},
   pickacc(el){ui.accPick=el.dataset.id;render()},
   sealacc(){if(!ui.accPick)return;PARTY.collection("acc").doc(ME).set({pick:ui.accPick,round:K().round,at:Date.now()}).then(()=>{ui.accPick=null;toast("Accusation sealed 🔒")}).catch(err)},
-  hotpick(el){const c=S.main.current;if(!c||c.type!=="hot"||c.win||isOut(ME,"hot"))return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
+  hotpick(el){const c=curOf(myRoom());if(!c||c.type!=="hot"||c.win||isOut(ME,"hot"))return;PARTY.collection("hotvotes").doc(ME).set({qid:c.qid,pick:el.dataset.id,at:Date.now()}).catch(err)},
   lvl(el){up({dareLevel:el.dataset.l})},
   draw:hostDraw,
   daredone(){const c=S.main.current;if(!c.done)addLog({type:"dare",pid:c.pid,res:"did",text:c.text});up({["points."+c.pid]:FV.increment(c.done?0:1)}).then(()=>{toast(nm(c.pid)+" +1");hostDraw()})},
   darechicken(){const c=S.main.current;if(!c.done)addLog({type:"dare",pid:c.pid,res:"chicken",text:c.text});toast(nm(c.pid)+" drinks twice 🍺");hostDraw()},
   hotnew:hostHot,hotreveal:hostHotReveal,
   clearcur(){up({current:null})},
-  selfdid(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"did",["points."+ME]:FV.increment(1)},t=>logT(t,{type:"dare",pid:ME,res:"did",text:c.text})).then(ok=>ok&&toast("+1 for you"))},
-  selfchicken(){const c=S.main.current;if(!c||c.pid!==ME||c.done)return;guarded(sigC,{"current.done":"chicken"},t=>logT(t,{type:"dare",pid:ME,res:"chicken",text:c.text})).then(ok=>ok&&toast("Drink twice 🍺"))},
-  skipnext(){const o=planNext();if(!o){toast("Not enough players in Dares or Hot Seat");return}adv(o)},
+  selfdid(){const R=myRoom(),c=curOf(R);if(!c||c.pid!==ME||c.done)return;guarded(sigCr(R),{[CUR(R)+".done"]:"did",["points."+ME]:FV.increment(1)},t=>logT(t,{type:"dare",pid:ME,res:"did",text:c.text})).then(ok=>ok&&toast("+1 for you"))},
+  selfchicken(){const R=myRoom(),c=curOf(R);if(!c||c.pid!==ME||c.done)return;guarded(sigCr(R),{[CUR(R)+".done"]:"chicken"},t=>logT(t,{type:"dare",pid:ME,res:"chicken",text:c.text})).then(ok=>ok&&toast("Drink twice 🍺"))},
+  skipnext(){const o=planNext();if(!o){toast("Not enough players in Dares or Hot Seat");return}adv(o,true)},
+  sdraw(){const o=planDare("side");if(!o){toast("Need at least 2 people in the side room playing Dares");return}adv(o,true,"side")},
+  shot(){const o=planHot("side");if(!o){toast("Hot Seat needs at least 3 people in the side room");return}adv(o,true,"side")},
+  shotreveal(){const o=planHotReveal("side");if(o)adv(o,true,"side")},
+  openside(){if(!ME)return;const o={side:{open:true,current:null,at:Date.now()},["players."+ME+".room"]:"side"};ids().forEach(id=>{if(id!==ME&&S.main.players[id].room==="side")o["players."+id+".room"]="main"});up(o).then(()=>toast("Side room open. Tell people to tap Join."))},
+  joinside(){if(ME&&sideOpen())up({["players."+ME+".room"]:"side"}).then(()=>toast("You're in the side room"))},
+  leaveside(){if(!ME)return;const last=members("side").filter(id=>id!==ME).length===0,o={["players."+ME+".room"]:"main"};if(last)o["side.open"]=false;up(o).then(()=>toast(last?"Side room closed":"Back in the TV room"))},
   opt(el){const g=el.dataset.g,out=!isOut(ME,g);up({["players."+ME+".out."+g]:out}).then(()=>toast(out?"You're sitting out of "+GAMES[g]:"Welcome back to "+GAMES[g]))},
+  setfocus(el){up({focus:mkFocus(el.dataset.g)})},
   editpts(){ui.editPts=!ui.editPts;render()},
   pictgo:pictGo,ppass:pictPass,pdone:()=>pictDone(false),
   pgot(el){const id=el.dataset.id,ph=phoneOk(PI());if(ph.includes(id))return;ui.got=ui.got||[];const i=ui.got.indexOf(id);if(i>=0)ui.got.splice(i,1);else ui.got.push(id);render()},
@@ -967,7 +1037,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v9<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v11<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

@@ -170,6 +170,20 @@ button{touch-action:manipulation}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,.mono,.recap{-webkit-user-select:text;user-select:text}
 .board-slot,.board-slot *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}
+.topts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.topt{display:flex;align-items:center;gap:10px;min-height:64px;padding:12px;border-radius:14px;border:2px solid var(--tc);background:var(--crypt);text-align:left;font-weight:700;font-size:17px;color:var(--bone);min-width:0;overflow-wrap:anywhere}
+.topt b{flex:0 0 auto;width:30px;height:30px;border-radius:99px;background:var(--tc);color:#1a0d05;display:grid;place-items:center;font-size:15px}
+.topt span{min-width:0}
+.topt[aria-pressed="true"]{background:var(--ember-dim);box-shadow:0 0 0 3px var(--tc)}
+button.topt[disabled]:not([aria-pressed="true"]){opacity:.4}
+.topt.right{border-color:var(--moss);box-shadow:0 0 0 4px var(--moss)}
+.topt.wrong{opacity:.38}
+.topt em{margin-left:auto;font-style:normal;font-family:var(--f-mono);color:var(--ash);flex:0 0 auto}
+@media (max-width:380px){.topts{grid-template-columns:1fr}}
+.tvt{grid-template-columns:1.6fr 1fr}
+.tq{font-size:clamp(26px,3.4vw,64px);font-weight:700;line-height:1.15;text-wrap:balance}
+.topts.big .topt{font-size:clamp(18px,2.2vw,40px);min-height:clamp(70px,11vh,150px)}
+.topts.big .topt b{width:clamp(32px,3vw,56px);height:clamp(32px,3vw,56px);font-size:clamp(16px,1.6vw,28px)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -269,7 +283,7 @@ const uid=()=>"p"+Math.random().toString(36).slice(2,9);
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 function toast(t){const el=document.createElement("div");el.className="toast";el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
 const defaults=()=>({created:Date.now(),players:{},cats:JSON.parse(JSON.stringify(CATS)),killerCount:1,
-  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null,pict:{status:"off",game:0},pictDeck:"mix",sab:{last:{},hit:{}},event:null,awards:null});
+  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null,pict:{status:"off",game:0},trivia:{status:"off",game:0},pictDeck:"mix",sab:{last:{},hit:{}},event:null,awards:null});
 
 /* ================= app state ================= */
 const hash=location.hash.replace(/^#/,"");
@@ -278,7 +292,7 @@ const EASEL=MODE==="easel";
 if(hash==="host-"+HOST_KEY)ls.set("gs-host-"+PARTY_ID,"1");
 const IS_HOST=(hash==="host-"+HOST_KEY||ls.get("gs-host-"+PARTY_ID)==="1")&&MODE==="phone";
 let ME=ls.get("gs-me-"+PARTY_ID);
-const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null,log:[],pg:[],draw:null};
+const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null,log:[],pg:[],draw:null,ta:[]};
 const ui={tab:"live",flow:null,draft:{},accPick:null,editPts:false,revealShown:null,hotUsed:[],used:{mild:[],spicy:[],unhinged:[]}};
 let FS,PARTY,FV;
 
@@ -292,7 +306,7 @@ const K=()=>S.main.killer||defaults().killer;
 const isOut=(id,g)=>!!(S.main.players[id]&&S.main.players[id].out&&S.main.players[id].out[g]);
 const inGame=g=>ids().filter(id=>!isOut(id,g));
 const kPlayers=()=>{const k=K();return (k.players&&k.players.length?k.players:ids()).filter(id=>S.main.players[id])};
-const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer",pict:"Pictionary",sab:"Sabotage"};
+const GAMES={dares:"Dares",hot:"Hot Seat",killer:"Who's the Killer",pict:"Pictionary",trivia:"Trivia",sab:"Sabotage"};
 const accThisRound=()=>{const kp=kPlayers();return S.acc.filter(a=>a.round===K().round&&kp.includes(a.id))};
 /* ===== rooms: the TV room (main) is always on; an optional side room plays Dares & Hot Seat on phones ===== */
 const sideOpen=()=>!!(S.main&&S.main.side&&S.main.side.open);
@@ -318,12 +332,12 @@ async function join(name){
 function claim(id){ME=id;ls.set("gs-me-"+PARTY_ID,id);ui.tab="live";render()}
 
 /* ===== what's on now: every phone and the TV follow this ===== */
-const FOCUS={dares:{tab:"live",name:"Dares & Hot Seat"},killer:{tab:"killer",name:"Who's the Killer"},pict:{tab:"pict",name:"Pictionary"},vote:{tab:"vote",name:"Costume awards"},board:{tab:"board",name:"the Leaderboard"}};
+const FOCUS={dares:{tab:"live",name:"Dares & Hot Seat"},killer:{tab:"killer",name:"Who's the Killer"},pict:{tab:"pict",name:"Pictionary"},trivia:{tab:"live",name:"Trivia"},vote:{tab:"vote",name:"Costume awards"},board:{tab:"board",name:"the Leaderboard"}};
 const focusNow=()=>(S.main&&S.main.focus)||null;
 const mkFocus=g=>({g,at:Date.now()});
 /* autopilot may only take the spotlight from games that aren't mid-moment */
 function autoFocusOk(){const f=focusNow();if(!f||["dares","board"].includes(f.g))return true;
-  if(f.g==="pict"&&pictActive())return false;if(f.g==="killer"&&K().status==="accusing")return false;if(f.g==="vote"&&S.main.reveal&&!S.main.reveal.done)return false;
+  if(f.g==="pict"&&pictActive())return false;if(triviaActive())return false;if(f.g==="killer"&&K().status==="accusing")return false;if(f.g==="vote"&&S.main.reveal&&!S.main.reveal.done)return false;
   return Date.now()-f.at>3*60000}
 function planReveal(){
   const res=activeCats().map(c=>{const t={};
@@ -402,7 +416,7 @@ async function autoTick(){
     if(R&&!R.done){if(now-(R.stepAt||R.nonce)>12000){const last=R.step>=R.results.length-1;
       await guarded(d=>d.reveal?d.reveal.step+":"+d.reveal.nonce+":"+d.reveal.done:"",last?{"reveal.done":true}:{"reveal.step":R.step+1,"reveal.stepAt":now})}return}
     const c=m.current;
-    if(pictActive()){}
+    if(pictActive()||triviaActive()){}
     else if(c&&c.type==="hot"&&!c.win){const N=inRoom("hot","main").length,n=hotThisQ().length;if((N&&n>=N)||now-c.at>90000){const o=planHotReveal();if(o)await adv(o)}}
     else if(!c||now-c.at>A.every*60000){const o=planNext();if(o)await adv(o)}
     if(sideOpen()){const sc=curOf("side");
@@ -419,7 +433,7 @@ async function autoTick(){
 async function clearCol(name){const s=await PARTY.collection(name).get();let b=FS.batch(),n=0;
   for(const d of s.docs){b.delete(d.ref);if(++n===450){await b.commit();b=FS.batch();n=0}}if(n)await b.commit()}
 async function hostReset(keepGuests){
-  try{await Promise.all(["ballots","acc","hotvotes","roles","log","pguess","draw"].map(clearCol));
+  try{await Promise.all(["ballots","acc","hotvotes","roles","log","pguess","draw","tans"].map(clearCol));
     const d=defaults();if(keepGuests){d.players=S.main.players;d.cats=S.main.cats;d.killerCount=S.main.killerCount;if(S.main.auto)d.auto=S.main.auto;d.pictDeck=S.main.pictDeck||"mix"}
     await PARTY.set(d);ui.flow=null;toast(keepGuests?"Games reset. Guests kept.":"Party wiped.")}catch(e){err(e)}
 }
@@ -527,8 +541,9 @@ function vLive(){
   const crowd=!IS_HOST&&A.on&&R==="main"?`<p class="muted" style="margin:12px 0 0;font-size:14px">${nextIn()}</p><div style="height:10px"></div><button class="btn ghost" data-act="skipnext" ${age<20000?"disabled":""}>Skip to the next one</button>`:"";
   const E=S.main.event,evb=E&&Date.now()-E.at<120000?`<div class="panel" style="border-color:var(--blood);margin-bottom:12px"><div class="award" style="color:var(--blood)">Sabotage</div><b>${esc(E.text)}</b></div>`:"";
   const hx=hexOf(ME),hexb=hx?`<div class="panel" style="border-color:#9b7bd4;margin-bottom:12px"><div class="award" style="color:#9b7bd4">🕸 You're hexed</div><b>${esc(hx.text)}</b><p class="muted" style="margin:0;font-size:14px">Wears off in <b data-ends="${hx.until}"></b>.</p></div>`:"";
+  if(triviaActive()&&R==="main")return `${hexb}${vTrivia()}`;
   if(pictActive()&&R==="main")return `<h2>Now playing</h2>${roomPanel(R)}${hexb}${evb}<div class="card"><div class="award" style="text-align:left">Pictionary is on</div><div class="what">Everything else is paused until it's over.</div></div><div style="height:12px"></div><button class="btn" data-act="tab" data-tab="pict">Go to Pictionary</button>${host}`;
-  return `<h2>${R==="side"?"Side room":"Now playing"}</h2>${roomPanel(R)}${hexb}${evb}${card}${crowd}${sideCtl}${optRow("dares")}${optRow("hot")}${host}`;
+  return `<h2>${R==="side"?"Side room":"Now playing"}</h2>${roomPanel(R)}${hexb}${evb}${R==="main"?triviaStartPanel():""}${card}${crowd}${sideCtl}${optRow("dares")}${optRow("hot")}${R==="main"?optRow("trivia"):""}${host}`;
 }
 function ranked(){const pts=S.main.points||{},t=S.main.titles||{};return ids().map(id=>({id,pts:pts[id]||0,t:(t[id]||[]).length})).sort((a,b)=>b.pts-a.pts||nm(a.id).localeCompare(nm(b.id)))}
 function lbHtml(edit,lim){const r=ranked().slice(0,lim||999),top=r[0]&&r[0].pts>0?r[0].pts:null,k=K(),dead=(k.dead||[]).map(d=>d.id);
@@ -552,7 +567,7 @@ function awardsPanel(){const A=AUTO(),W=S.main.awards,opts=[["off","Off"],["01:0
   ${W?hold("awreplay","Replay the awards","ghost","Hold 1.3s · plays on every screen again"):hold("awnow","Hand out the awards now","","Hold 1.3s · plays on every screen")}
   <p class="muted" style="margin:0;font-size:14px">Morning-after recap, to share tomorrow:</p><div class="mono">${esc(joinUrl())}#recap</div>`}
 function focusSeg(){const f=(focusNow()||{}).g;
-  return `<div class="award">On every screen</div><div class="seg">${Object.entries(FOCUS).map(([g,v])=>`<button data-act="setfocus" data-g="${g}" aria-pressed="${f===g}">${g==="dares"?"Dares & Hot Seat":g==="killer"?"Killer":g==="pict"?"Pictionary":g==="vote"?"Costumes":"Leaderboard"}</button>`).join("")}</div>
+  return `<div class="award">On every screen</div><div class="seg">${Object.entries(FOCUS).map(([g,v])=>`<button data-act="setfocus" data-g="${g}" aria-pressed="${f===g}">${({dares:"Dares & Hot Seat",killer:"Killer",pict:"Pictionary",trivia:"Trivia",vote:"Costumes",board:"Leaderboard"})[g]}</button>`).join("")}</div>
   <p class="muted" style="margin:0;font-size:14px">Moves the TV and everyone's phone to that game.</p>`}
 function vHost(){
   const ps=players(),locked=S.ballots.length>0;
@@ -593,6 +608,7 @@ function vTVBoard(){const r=ranked(),t=Object.entries(S.main.titles||{}).flatMap
   return tvFrame("Leaderboard",m)}
 function vTV(){
   const F=(focusNow()||{}).g;
+  if(triviaActive()||(F==="trivia"&&!pictActive()))return vTVTrivia();
   if(pictActive()||F==="pict")return vTVPict();
   if(F==="killer")return vTVKiller();
   if(F==="vote")return vTVVote();
@@ -616,7 +632,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v11</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v12</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -635,7 +651,7 @@ function renderInner(){
   tabs.hidden=false;renderTabs();
   const keep=document.activeElement&&document.activeElement.tagName==="INPUT"?document.activeElement.id:null,kv=keep?document.activeElement.value:null;
   const FO=focusNow();if(FO&&FO.at!==ui.focusSeen){const first=ui.focusSeen===undefined;ui.focusSeen=FO.at;const tab=FOCUS[FO.g]&&FOCUS[FO.g].tab;
-    if(tab&&ui.tab!==tab&&ui.flow!=="editvote"&&!(IS_HOST&&ui.tab==="host"&&!first)&&!(myRoom()==="side"&&["dares","pict"].includes(FO.g))){ui.tab=tab;ui.draft={};ui.accPick=null;if(!first){toast("Everyone's on "+FOCUS[FO.g].name+" now");buzz()}}}
+    if(tab&&ui.tab!==tab&&ui.flow!=="editvote"&&!(IS_HOST&&ui.tab==="host"&&!first)&&!(myRoom()==="side"&&["dares","pict","trivia"].includes(FO.g))){ui.tab=tab;ui.draft={};ui.accPick=null;if(!first){toast("Everyone's on "+FOCUS[FO.g].name+" now");buzz()}}}
   const PP=PI();if(PP.status==="ready"&&PP.drawer===ME&&ui.autoSw!==PP.turn){ui.autoSw=PP.turn;ui.tab="pict";buzz()}
   const EV=S.main.event;if(EV&&EV.target===ME&&ui.evBuzz!==EV.at&&Date.now()-EV.at<60000){ui.evBuzz=EV.at;buzz();toast("😈 You've been sabotaged!")}
   const v={live:vLive,vote:vVote,killer:vKiller,pict:vPict,board:vBoard,host:vHost,recap:vRecap}[ui.tab]||vLive;
@@ -710,7 +726,7 @@ function nextDrawerPlan(p){const base=p.order||[],order=base.concat(pictPlayers(
   for(let i=(p.idx==null?-1:p.idx)+1;i<order.length;i++){const id=order[i];if(S.main.players[id]&&!isOut(id,"pict")&&roomOf(id)==="main")return readyFields(order,i)}
   return {turn:null,o:{"pict.status":"done","pict.doneAt":Date.now(),"pict.order":order}}}
 function writeTurn(plan){return guarded(sigP,plan.o,plan.turn?t=>t.set(PARTY.collection("draw").doc("live"),{turn:plan.turn,s:[]}):null)}
-function startPict(){if(pictActive())return;const ps=shuffle(pictPlayers());if(ps.length<3){toast("Need at least 3 players in Pictionary");return}
+function startPict(){if(pictActive())return;if(triviaActive()){toast("Finish trivia first");return}const ps=shuffle(pictPlayers());if(ps.length<3){toast("Need at least 3 players in Pictionary");return}
   const r=readyFields(ps,0),o={focus:mkFocus("pict"),pict:{status:"ready",game:(PI().game||0)+1,order:ps,idx:0,drawer:ps[0],w:r.o["pict.w"],turn:r.turn,readyAt:Date.now(),passes:0,results:{},last:null},pictUsed:r.o.pictUsed};
   return writeTurn({turn:r.turn,o})}
 function turnStrokes(p){if(iDraw(p)&&ui.pturn===p.turn)return ui.strokes||[];return S.draw&&S.draw.turn===p.turn?S.draw.s||[]:[]}
@@ -728,6 +744,7 @@ async function alwaysTick(){if(!S.main||pticking||!PARTY)return;pticking=true;tr
   if(p.status==="drawing"){const g=pictGuessers(p),n=S.pg.filter(x=>x.turn===p.turn&&x.ok&&g.includes(x.id)).length;
     if(g.length&&n>=g.length){const f=finishPlan(p);await guarded(sigP,f.o,f.extra)}}
   else if(p.status==="reveal"&&now-p.revealAt>7000)await writeTurn(nextDrawerPlan(p));
+  await triviaTick(now);
   const A=AUTO(),W=S.main.awards;
   if(!W){if(dueClock(A.awardsAt)&&recentActivity()&&ids().length>=2)await awardsWrite()}
   else if(!W.done&&now-(W.stepAt||W.nonce)>10000){const last=W.step>=W.list.length-1;await guarded(sigW,last?{"awards.done":true}:{"awards.step":W.step+1,"awards.stepAt":now})}
@@ -838,6 +855,198 @@ function vTVPict(){const p=PI();
   return `<div class="tv tvp"><div class="stack" style="min-width:0"><div class="brand">Haunted Pictionary<small>Game ${p.game||1}</small></div>${top}<div class="board-slot" data-slot="live"></div></div>
   <div class="stack" style="min-width:0;justify-content:center">${side}<div class="panel">${lbHtml(false,6)}</div>${sideStrip()}</div></div>`}
 
+/* ================= trivia ================= */
+/* each question: [category, question, correct, wrong, wrong, wrong] */
+const TQ=[
+["Movies","Which film won the very first Academy Award for Best Picture?","Wings","All Quiet on the Western Front","The Jazz Singer","Metropolis"],
+["Movies","In “Jaws,” what's the name of Quint's shark-hunting boat?","Orca","Pequod","Andrea Gail","Black Pearl"],
+["Movies","Which movie has the line “Here's Johnny!”?","The Shining","Psycho","Misery","Carrie"],
+["Movies","Who directed “Get Out”?","Jordan Peele","Ari Aster","James Wan","Mike Flanagan"],
+["Movies","In “The Matrix,” which pill does Neo take?","Red","Blue","Green","White"],
+["Movies","“Toy Story” was the first fully computer-animated feature film from which studio?","Pixar","DreamWorks","Blue Sky","Illumination"],
+["Movies","Who played Jack Dawson in “Titanic”?","Leonardo DiCaprio","Brad Pitt","Matt Damon","Johnny Depp"],
+["Movies","In “Mean Girls,” what colour do they wear on Wednesdays?","Pink","Black","Red","White"],
+["Movies","What does E.T. famously want to do?","Phone home","Eat candy","Ride a bike","Fly to the moon"],
+["Movies","In “Back to the Future,” what speed does the DeLorean need to hit to time travel?","88 mph","77 mph","99 mph","121 mph"],
+["Music","Which band released the album “Abbey Road”?","The Beatles","The Rolling Stones","Pink Floyd","The Who"],
+["Music","What is Lady Gaga's real first name?","Stefani","Stephanie","Gabriella","Alicia"],
+["Music","“Smells Like Teen Spirit” was a hit for which band?","Nirvana","Pearl Jam","Soundgarden","Foo Fighters"],
+["Music","How many keys are on a standard piano?","88","76","92","64"],
+["Music","Beyoncé first found fame in which group?","Destiny's Child","TLC","En Vogue","Spice Girls"],
+["Music","Which rapper's real name is Marshall Mathers?","Eminem","Logic","Mac Miller","Machine Gun Kelly"],
+["Music","“Bohemian Rhapsody” is a song by which band?","Queen","Led Zeppelin","Aerosmith","Journey"],
+["Music","Which artist released the album “Thriller”?","Michael Jackson","Prince","Stevie Wonder","Lionel Richie"],
+["Music","How many strings does a standard guitar have?","6","5","7","8"],
+["Music","Which singer was known as the “Queen of Soul”?","Aretha Franklin","Whitney Houston","Diana Ross","Tina Turner"],
+["TV","In “Friends,” what's the name of the coffee shop?","Central Perk","The Daily Grind","Java Joe's","Monk's Café"],
+["TV","“The Office” (US) is set in which city?","Scranton","Pittsburgh","Akron","Stamford"],
+["TV","What's the name of the town in “Stranger Things”?","Hawkins","Derry","Riverdale","Twin Peaks"],
+["TV","What alias does Walter White use in “Breaking Bad”?","Heisenberg","Einstein","Mr. Pink","The Chemist"],
+["TV","Which family lives at 742 Evergreen Terrace?","The Simpsons","The Griffins","The Belchers","The Smiths"],
+["TV","What's the name of Ross's monkey in “Friends”?","Marcel","Bubbles","Coco","George"],
+["TV","“Squid Game” comes from which country?","South Korea","Japan","China","Thailand"],
+["TV","In “Seinfeld,” what's Kramer's first name?","Cosmo","Kenny","Newman","Elaine"],
+["TV","What's the name of the bar in “The Simpsons”?","Moe's Tavern","Cheers","Paddy's Pub","MacLaren's"],
+["TV","Which show is about a seat called the Iron Throne?","Game of Thrones","The Witcher","Vikings","The Last Kingdom"],
+["Horror","Halloween grew out of which ancient Celtic festival?","Samhain","Beltane","Imbolc","Lughnasadh"],
+["Horror","In Ireland, jack-o'-lanterns were originally carved from what?","Turnips","Pumpkins","Apples","Potatoes"],
+["Horror","Who wrote the novel “Dracula”?","Bram Stoker","Edgar Allan Poe","Mary Shelley","H. P. Lovecraft"],
+["Horror","Who wrote “Frankenstein”?","Mary Shelley","Bram Stoker","Charlotte Brontë","Jane Austen"],
+["Horror","What's the name of the killer doll in “Child's Play”?","Chucky","Annabelle","Billy","Robert"],
+["Horror","What's the name of the masked killer in “Scream”?","Ghostface","Leatherface","The Shape","Pinhead"],
+["Horror","Which famous escape artist died on Halloween?","Harry Houdini","David Copperfield","Harry Blackstone","Howard Thurston"],
+["Horror","What's the fear of Halloween called?","Samhainophobia","Phasmophobia","Coulrophobia","Necrophobia"],
+["Horror","In “The Exorcist,” what's the possessed girl's name?","Regan","Carrie","Samara","Damien"],
+["Horror","Which killer haunts dreams in “A Nightmare on Elm Street”?","Freddy Krueger","Jason Voorhees","Michael Myers","Candyman"],
+["Science","What's the chemical symbol for gold?","Au","Ag","Gd","Go"],
+["Science","Which planet is closest to the sun?","Mercury","Venus","Mars","Earth"],
+["Science","How many bones are in the adult human body?","206","186","212","226"],
+["Science","How many hearts does an octopus have?","3","1","2","4"],
+["Science","What's the largest organ of the human body?","Skin","Liver","Brain","Lungs"],
+["Science","Which gas do plants take in from the air for photosynthesis?","Carbon dioxide","Oxygen","Nitrogen","Helium"],
+["Science","What's the hardest natural substance?","Diamond","Quartz","Titanium","Granite"],
+["Science","Which planet has the most known moons?","Saturn","Jupiter","Uranus","Neptune"],
+["Science","What's the only mammal that can truly fly?","Bat","Flying squirrel","Sugar glider","Colugo"],
+["Science","About how fast does light travel?","300,000 km per second","30,000 km per second","3,000 km per second","3 million km per second"],
+["Geography","What's the capital of Australia?","Canberra","Sydney","Melbourne","Perth"],
+["Geography","What's the largest ocean?","Pacific","Atlantic","Indian","Arctic"],
+["Geography","What's the smallest country in the world?","Vatican City","Monaco","San Marino","Liechtenstein"],
+["Geography","Mount Everest sits on the border of Nepal and which country?","China","India","Bhutan","Pakistan"],
+["Geography","What's the largest hot desert in the world?","Sahara","Arabian","Gobi","Kalahari"],
+["Geography","What's the largest US state by area?","Alaska","Texas","California","Montana"],
+["Geography","Istanbul sits on two continents: Europe and…","Asia","Africa","Australia","Antarctica"],
+["Geography","What's the capital of Iceland?","Reykjavík","Oslo","Helsinki","Nuuk"],
+["Geography","Counting its overseas territories, which country spans the most time zones?","France","Russia","United States","United Kingdom"],
+["Geography","Which country has the most people?","India","China","United States","Indonesia"],
+["History","In which year did the Titanic sink?","1912","1905","1915","1923"],
+["History","Who was the first person to walk on the moon?","Neil Armstrong","Buzz Aldrin","Yuri Gagarin","John Glenn"],
+["History","In which year did the Berlin Wall fall?","1989","1991","1985","1979"],
+["History","Which is the only one of the Seven Wonders of the Ancient World still standing?","Great Pyramid of Giza","Colossus of Rhodes","Hanging Gardens of Babylon","Lighthouse of Alexandria"],
+["History","Which civilization built Machu Picchu?","Inca","Aztec","Maya","Olmec"],
+["History","After Waterloo, Napoleon was exiled to which island?","Saint Helena","Elba","Corsica","Malta"],
+["History","In which year did the Salem witch trials happen?","1692","1592","1776","1812"],
+["History","Which country gave the Statue of Liberty to the United States?","France","England","Spain","Italy"],
+["History","In which year did World War II end?","1945","1944","1946","1939"],
+["History","Cleopatra was the last active ruler of which kingdom?","Egypt","Persia","Greece","Babylon"],
+["Food & drink","What's the main ingredient in guacamole?","Avocado","Lime","Tomato","Pepper"],
+["Food & drink","A margarita is made with which spirit?","Tequila","Vodka","Rum","Gin"],
+["Food & drink","A mojito is made with which spirit?","Rum","Gin","Tequila","Whisky"],
+["Food & drink","What's the most expensive spice by weight?","Saffron","Vanilla","Cardamom","Cinnamon"],
+["Food & drink","Champagne must come from which country?","France","Italy","Spain","Germany"],
+["Food & drink","Marzipan is made mostly from which nut?","Almond","Hazelnut","Cashew","Pistachio"],
+["Food & drink","Which gas gives Guinness its creamy head?","Nitrogen","Carbon dioxide","Oxygen","Helium"],
+["Food & drink","A classic mimosa is sparkling wine and which juice?","Orange","Grapefruit","Peach","Cranberry"],
+["Food & drink","Pizza Margherita's colours match which flag?","Italy","Mexico","Ireland","Hungary"],
+["Food & drink","Sake is brewed from what?","Rice","Barley","Potatoes","Plums"],
+["Sports","How many players does a soccer team have on the field?","11","10","12","9"],
+["Sports","In bowling, what are three strikes in a row called?","A turkey","A hat trick","A triple","A gobbler"],
+["Sports","How long is a marathon?","42.2 km","40 km","26.2 km","50 km"],
+["Sports","Which sport uses a shuttlecock?","Badminton","Squash","Table tennis","Pickleball"],
+["Sports","How many rings are on the Olympic flag?","5","4","6","7"],
+["Sports","What's a perfect score in ten-pin bowling?","300","200","250","500"],
+["Sports","How many NBA championships did Michael Jordan win?","6","5","4","7"],
+["Sports","In golf, what's one stroke under par called?","Birdie","Eagle","Bogey","Albatross"],
+["Sports","In tennis, what's a score of zero called?","Love","Nil","Duck","Zip"],
+["Sports","Which trophy is the oldest awarded in North American pro sports?","Stanley Cup","Vince Lombardi Trophy","Larry O'Brien Trophy","Commissioner's Trophy"],
+["Canada","Which is Canada's only officially bilingual province?","New Brunswick","Quebec","Ontario","Manitoba"],
+["Canada","What's the nickname for Canada's $2 coin?","Toonie","Loonie","Doubloon","Twonie"],
+["Canada","Poutine comes from which province?","Quebec","Ontario","New Brunswick","Nova Scotia"],
+["Canada","Basketball was invented by a Canadian named…","James Naismith","Tim Horton","Wayne Gretzky","Frederick Banting"],
+["Canada","Which Canadian city hosted the 1976 Summer Olympics?","Montreal","Toronto","Vancouver","Calgary"],
+["Canada","What's Canada's national animal?","Beaver","Moose","Canada goose","Polar bear"],
+["Canada","How many provinces does Canada have?","10","13","9","12"],
+["Canada","Which Toronto landmark was the world's tallest free-standing structure for over 30 years?","CN Tower","First Canadian Place","Rogers Centre","Scotia Plaza"],
+["Canada","Which Canadian rapper released “Hotline Bling”?","Drake","The Weeknd","Tory Lanez","NAV"],
+["Canada","What's the capital of Canada?","Ottawa","Toronto","Montreal","Vancouver"],
+["Internet","What was the title of the first video ever uploaded to YouTube?","Me at the zoo","Charlie bit my finger","Hello world","Test upload"],
+["Internet","What does GIF stand for?","Graphics Interchange Format","Graphic Image File","General Image Format","Graphical Internet File"],
+["Internet","Who co-founded Microsoft with Bill Gates?","Paul Allen","Steve Wozniak","Steve Ballmer","Larry Page"],
+["Internet","What was Google's original name?","BackRub","Googol","SearchBot","PageRank"],
+["Internet","Tetris was created in which country?","Soviet Union","Japan","United States","Germany"],
+["Internet","Which song do you hear when you get Rickrolled?","Never Gonna Give You Up","Take On Me","Together Forever","Don't You Want Me"],
+["Internet","What was Mario called in the original “Donkey Kong”?","Jumpman","Plumber","Mr. Video","Super Boy"],
+["Internet","Which company makes the PlayStation?","Sony","Nintendo","Microsoft","Sega"],
+["Internet","What does “www” stand for?","World Wide Web","World Web Wide","Wide World Web","Web World Wide"],
+["Internet","In which year did Facebook launch?","2004","2001","2006","2008"],
+["Weird facts","What's a group of crows called?","A murder","A haunt","A coven","A parliament"],
+["Weird facts","Which animal has fingerprints almost identical to humans?","Koala","Chimpanzee","Raccoon","Sloth"],
+["Weird facts","Which food has been found still edible in ancient Egyptian tombs?","Honey","Bread","Dates","Cheese"],
+["Weird facts","What's the dot over a lowercase “i” called?","A tittle","A jot","A tilde","A pip"],
+["Weird facts","What colour is a polar bear's skin?","Black","White","Pink","Grey"],
+["Weird facts","Botanically speaking, bananas are…","Berries","Nuts","Legumes","Herbs"],
+["Weird facts","Where is a shrimp's heart?","In its head","In its tail","In its legs","It has no heart"],
+["Weird facts","Which planet spins in the opposite direction to most others?","Venus","Mars","Jupiter","Mercury"],
+["Weird facts","What's the most common blood type?","O positive","A positive","B negative","AB positive"],
+["Weird facts","How many noses does a slug have?","4","1","2","0"],
+["Spicy","Which hormone is nicknamed the “love hormone”?","Oxytocin","Adrenaline","Cortisol","Melatonin"],
+["Spicy","Which Roman goddess was the goddess of love?","Venus","Juno","Minerva","Diana"],
+["Spicy","The Kama Sutra comes from which country?","India","China","Egypt","Greece"],
+["Spicy","The word avocado comes from an Aztec word that also meant…","Testicle","Love","Fertile","Green"],
+["Spicy","Casanova was born in which city?","Venice","Rome","Paris","Florence"],
+["Spicy","Viagra was first developed to treat what?","Heart chest pain (angina)","Hair loss","Insomnia","Jet lag"],
+["Spicy","Legend says Casanova ate 50 of what for breakfast?","Oysters","Eggs","Figs","Strawberries"],
+["Spicy","“Fifty Shades of Grey” started as fan fiction of which series?","Twilight","Harry Potter","The Hunger Games","Outlander"],
+["Spicy","Valentine's Day is named after a…","Saint","Roman emperor","Greek god","Poet"],
+["Spicy","In Greek myth, who is the god of desire and son of Aphrodite?","Eros","Hermes","Apollo","Dionysus"]
+];
+const TCATS=[...new Set(TQ.map(q=>q[0]))];
+const T_SECS=20,T_REVEAL=7000,T_QS=10;
+const TI=()=>Object.assign({status:"off",game:0},S.main&&S.main.trivia||{});
+const triviaActive=()=>["q","reveal"].includes(TI().status);
+const sigT=d=>d.trivia?(d.trivia.status+":"+(d.trivia.game||0)+":"+(d.trivia.qi||0)):"off:0:0";
+const triviaPlayers=()=>inRoom("trivia","main");
+const tKey=t=>t.game+":"+t.qi;
+function tQ(t){const e=(t.qs||[])[t.qi];if(!e)return null;const q=TQ[e.i];return {cat:q[0],text:q[1],opts:e.ord.map(k=>q[2+k]),right:e.ord.indexOf(0)}}
+function pickTrivia(){let used=(S.main.triviaUsed||[]).filter(i=>i<TQ.length);if(TQ.length-used.length<T_QS)used=[];
+  const byCat={};TQ.forEach((q,i)=>{if(!used.includes(i))(byCat[q[0]]=byCat[q[0]]||[]).push(i)});
+  const out=[];let cats=shuffle(Object.keys(byCat)),last=null;
+  while(out.length<T_QS){if(!cats.length)cats=shuffle(Object.keys(byCat).filter(c=>byCat[c].length));if(!cats.length)break;
+    let c=cats.shift();if(c===last&&cats.length){cats.push(c);c=cats.shift()}
+    const pool=byCat[c];if(!pool||!pool.length)continue;const i=pool.splice(Math.floor(Math.random()*pool.length),1)[0];out.push(i);last=c}
+  return {qs:out.map(i=>({i,ord:shuffle([0,1,2,3])})),used:used.concat(out)}}
+function startTrivia(){if(triviaActive())return;if(pictActive()){toast("Finish Pictionary first");return}if(triviaPlayers().length<2){toast("Trivia needs at least 2 players");return}
+  const pk=pickTrivia(),now=Date.now();
+  return guarded(sigT,{trivia:{status:"q",game:(TI().game||0)+1,qi:0,qs:pk.qs,startAt:now,results:{},right:{},last:null},triviaUsed:pk.used,focus:mkFocus("trivia")})}
+function tAnswers(t){const k=tKey(t),ps=triviaPlayers();return S.ta.filter(a=>a.key===k&&ps.includes(a.id))}
+function tRevealPlan(t){const q=tQ(t),ans=tAnswers(t),counts=[0,0,0,0];ans.forEach(a=>{if(a.a>=0&&a.a<4)counts[a.a]++});
+  const right=ans.filter(a=>a.a===q.right).sort((a,b)=>a.at-b.at).map(a=>a.id),o={"trivia.status":"reveal","trivia.revealAt":Date.now(),"trivia.last":{qi:t.qi,counts,right}};
+  right.forEach((id,i)=>{const n=i===0?2:1;o["points."+id]=FV.increment(n);o["trivia.results."+id]=FV.increment(n);o["trivia.right."+id]=FV.increment(1)});return o}
+function tNextPlan(t){if(t.qi+1<(t.qs||[]).length)return {"trivia.status":"q","trivia.qi":t.qi+1,"trivia.startAt":Date.now(),"trivia.last":null};
+  const r=t.results||{},top=Math.max(0,...Object.values(r)),win=Object.keys(r).filter(id=>r[id]===top&&top>0&&S.main.players[id]),o={"trivia.status":"done","trivia.doneAt":Date.now(),"trivia.winners":win};
+  win.forEach(id=>{o["points."+id]=FV.increment(3)});return o}
+async function triviaTick(now){const t=TI();
+  if(t.status==="q"){const N=triviaPlayers().length,n=tAnswers(t).length;if(now-t.startAt>T_SECS*1000||(N&&n>=N))await guarded(sigT,tRevealPlan(t))}
+  else if(t.status==="reveal"&&now-t.revealAt>T_REVEAL){const o=tNextPlan(t);await guarded(sigT,o,o["trivia.status"]==="done"?tt=>logT(tt,{type:"trivia",results:t.results||{},right:t.right||{},winners:o["trivia.winners"]}):null)}}
+function triviaEnd(){const t=TI();if(!triviaActive())return;guarded(sigT,{"trivia.status":"done","trivia.doneAt":Date.now(),"trivia.winners":[]})}
+function tAnswer(el){const t=TI();if(t.status!=="q"||isOut(ME,"trivia")||myRoom()!=="main")return;if(S.ta.some(a=>a.id===ME&&a.key===tKey(t)))return;
+  PARTY.collection("tans").doc(ME).set({key:tKey(t),a:+el.dataset.a,at:Date.now()}).then(()=>buzz()).catch(err)}
+const TLET=["A","B","C","D"],TCOL=["#ff7a1a","#9b7bd4","#a6c46f","#e0475a"];
+function tTally(t,lim){const r=Object.entries(t.results||{}).filter(([id])=>S.main.players[id]).sort((a,b)=>b[1]-a[1]).slice(0,lim||99);
+  return r.length?`<div class="lb">${r.map(([id,v],i)=>`<div class="r ${i===0?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(id))}<small>${(t.right||{})[id]||0} right</small></span><span class="pts">${v}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody scored. Big brains only.</p>`}
+function triviaStartPanel(){const t=TI(),N=triviaPlayers().length;
+  return `<div class="panel stack" style="margin-bottom:12px"><div class="award">🧠 Trivia</div><p class="muted" style="margin:0;font-size:14px">10 questions across ${TCATS.length} categories, never the same one twice in a row. Answer on your phone. First right answer +2, other right answers +1, game winner +3.</p>
+  ${t.status==="done"&&t.game?`<b>Last game</b>${tTally(t,5)}`:""}
+  ${hold("tstart",t.game?"Play trivia again":"Start trivia","",N<2?"Need at least 2 players":"Hold 1.3s · anyone can",N<2||pictActive())}</div>`}
+function vTrivia(){const t=TI(),q=tQ(t),mine=S.ta.find(a=>a.id===ME&&a.key===tKey(t)),out=isOut(ME,"trivia"),end=`<div style="height:14px"></div>${hold("tend","End trivia","ghost","Hold 1.3s · anyone can")}`;
+  if(!q)return "";
+  const head=`<div class="award" style="display:flex;justify-content:space-between;gap:10px"><span>Question ${t.qi+1} of ${(t.qs||[]).length} · ${esc(q.cat)}</span>${t.status==="q"?`<span style="color:var(--ember)">⏱ <b data-ends="${t.startAt+T_SECS*1000}"></b></span>`:""}</div>`;
+  const qtext=`<div class="card" style="min-height:0"><div class="what" style="font-size:22px">${esc(q.text)}</div></div>`;
+  if(t.status==="q"){
+    const btns=out?`<p class="muted">You're sitting out of trivia. Watch the TV.</p>`:q.opts.map((o,i)=>`<button class="topt" data-act="tans" data-a="${i}" ${mine?"disabled":""} aria-pressed="${mine&&mine.a===i}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span></button>`).join("");
+    return `<h2>Trivia</h2>${head}${qtext}<div class="topts">${btns}</div>${mine?`<p class="muted" style="text-align:center">Locked in. Waiting for everyone…</p>`:""}${end}`}
+  const L=t.last||{},ok=mine&&mine.a===q.right,first=(L.right||[])[0]===ME;
+  return `<h2>Trivia</h2>${head}${qtext}<div class="topts">${q.opts.map((o,i)=>`<div class="topt ${i===q.right?"right":"wrong"}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span><em>${(L.counts||[])[i]||0}</em></div>`).join("")}</div>
+    <div class="panel" style="text-align:center;margin-top:12px;border-color:${ok?"var(--moss)":"var(--blood)"}"><b>${!mine?"You didn't answer.":ok?(first?"Right, and fastest! +2":"Right! +1"):"Wrong. Drink up."}</b></div>${end}`}
+function vTVTrivia(){const t=TI(),q=tQ(t);
+  if(t.status==="done"||!q)return tvFrame("Trivia",`<div class="card"><div class="award">Trivia · final scores</div>${(t.winners||[]).length?`<div class="who">${t.winners.map(id=>esc(nm(id))).join(" & ")}</div><div class="what">wins +3 bonus points</div>`:""}</div><div class="panel">${tTally(t,6)}</div>`);
+  const L=t.last||{},rev=t.status==="reveal",N=triviaPlayers().length,n=tAnswers(t).length;
+  return `<div class="tv tvt"><div class="stack" style="min-width:0"><div class="brand">Trivia<small>Question ${t.qi+1} of ${(t.qs||[]).length} · ${esc(q.cat)}</small></div>
+    <div class="tq">${esc(q.text)}</div>
+    <div class="topts big">${q.opts.map((o,i)=>`<div class="topt ${rev?(i===q.right?"right":"wrong"):""}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span>${rev?`<em>${(L.counts||[])[i]||0}</em>`:""}</div>`).join("")}</div></div>
+    <div class="stack" style="min-width:0;justify-content:center">${rev?`<div class="card"><div class="award">${(L.right||[]).length?"Fastest":"Nobody got it"}</div>${(L.right||[]).length?`<div class="who">${esc(nm(L.right[0]))}</div><div class="what">${L.right.length} got it right</div>`:`<div class="what">Everyone drinks.</div>`}</div>`
+      :`<div class="tvtimer" data-ends="${t.startAt+T_SECS*1000}"></div><div class="stat"><b>${n}/${N}</b>locked in · answer on your phone</div>`}
+    <div class="panel">${tTally(t,6)}</div>${sideStrip()}</div></div>`}
+
 /* ================= sabotage ================= */
 const SABS={drink:{label:"Drink Curse",cost:2,desc:"They drink twice. The TV announces it."},dare:{label:"Dare Bomb",cost:3,desc:"They get a nasty dare on the big screen, right now."},
   hex:{label:"Hex",cost:3,desc:"They're stuck with a cursed rule for 10 minutes."},heist:{label:"Point Heist",cost:5,desc:"Steal up to 3 of their points."}};
@@ -887,7 +1096,8 @@ function computeAwards(){const L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),aliv
     if(e.type==="death"&&!first&&alive(e.pid))first=e;
     if(e.type==="hot")(e.win||[]).forEach(id=>bump("hot",id));
     if(e.type==="killer"){(e.killers||[]).forEach(id=>bump("bodies",id,e.bodies||0));Object.entries(e.tally||{}).forEach(([id,v])=>{if(!(e.killers||[]).includes(id))bump("accused",id,v)})}
-    if(e.type==="pict"){(e.correct||[]).forEach(id=>bump("psychic",id));bump("picasso",e.drawer,(e.correct||[]).length)}});
+    if(e.type==="pict"){(e.correct||[]).forEach(id=>bump("psychic",id));bump("picasso",e.drawer,(e.correct||[]).length)}
+    if(e.type==="trivia")Object.entries(e.right||{}).forEach(([id,v])=>bump("brain",id,v))});
   const top=(k,min=1)=>{const c=cnt[k]||{},m=Math.max(0,...Object.values(c));return m>=min?{ids:Object.keys(c).filter(id=>c[id]===m),n:m}:null};
   const out=[],add=(label,r,detail)=>{if(r)out.push({label,ids:r.ids,detail:detail(r.n)})},s=n=>n===1?"":"s";
   if(first)out.push({label:"First Blood",ids:[first.pid],detail:"First to die, at "+clock(first.at)});
@@ -900,6 +1110,7 @@ function computeAwards(){const L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),aliv
   add("Master Saboteur",top("sabby"),n=>`Spent ${n} point${s(n)} ruining lives`);
   add("Most Hated",top("sabbed"),n=>`Sabotaged ${n} time${s(n)}`);
   add("Psychic",top("psychic"),n=>`Guessed ${n} drawing${s(n)}`);
+  add("Trivia Brain",top("brain",3),n=>`${n} right answers`);
   add("Filthy Picasso",top("picasso"),n=>`${n} correct guess${n===1?"":"es"} on their drawings`);
   const pts=S.main.points||{},pm=Math.max(0,...ids().map(id=>pts[id]||0));
   if(pm>0)out.push({label:"Party MVP",ids:ids().filter(id=>(pts[id]||0)===pm),detail:`${pm} points`,mvp:true});
@@ -923,6 +1134,7 @@ function vRecap(){const m=S.main,L=(S.log||[]).slice().sort((a,b)=>a.at-b.at),aw
     else if(e.type==="hot")x=`🔥 ${(e.win||[]).map(nmL).join(" & ")}: most likely to ${esc(e.q||"")}`;
     else if(e.type==="sab")x=`😈 ${nmL(e.by)} paid ${e.cost} pts to ${verb[e.kind]||"sabotage"} ${nmL(e.target)}${e.kind==="hex"&&e.rule?` (“${esc(e.rule)}”)`:""}${e.kind==="heist"?` and got ${e.stolen||0}`:""}${e.kind==="dare"&&e.text?`: “${esc(e.text)}”`:""}`;
     else if(e.type==="pict")x=`🎨 ${nmL(e.drawer)} drew “${esc(e.word)}” · ${(e.correct||[]).length} got it`;
+    else if(e.type==="trivia")x=`🧠 Trivia${(e.winners||[]).length?" won by "+e.winners.map(nmL).join(" & "):" game played"}`;
     else if(e.type==="costume")x=`👑 Costume winners crowned`;
     else if(e.type==="awards")x=`🏆 Party awards handed out`;
     return x?`<div class="r"><span class="n">${clock(e.at)}</span><span class="nm" style="font-weight:400">${x}</span><span></span></div>`:""}).join("");
@@ -945,7 +1157,7 @@ const holdActs={
   die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>{addLog({type:"death",pid:ME,round:K().round});toast("Rest in pieces. Take a drink.")})},
   resetgames:()=>hostReset(true),wipe:()=>hostReset(false),
   closeside:()=>up({"side.open":false}).then(()=>toast("Side room closed. Everyone is back in the TV room.")),
-  pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,
+  pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,tstart:startTrivia,tend:triviaEnd,
   sabgo:()=>doSab(ui.sabKind||"drink",ui.sabTarget),
   awnow:awardsWrite,
   awreplay:()=>up({"awards.step":0,"awards.done":false,"awards.nonce":Date.now(),"awards.stepAt":Date.now()})
@@ -981,6 +1193,7 @@ const acts={
   joinside(){if(ME&&sideOpen())up({["players."+ME+".room"]:"side"}).then(()=>toast("You're in the side room"))},
   leaveside(){if(!ME)return;const last=members("side").filter(id=>id!==ME).length===0,o={["players."+ME+".room"]:"main"};if(last)o["side.open"]=false;up(o).then(()=>toast(last?"Side room closed":"Back in the TV room"))},
   opt(el){const g=el.dataset.g,out=!isOut(ME,g);up({["players."+ME+".out."+g]:out}).then(()=>toast(out?"You're sitting out of "+GAMES[g]:"Welcome back to "+GAMES[g]))},
+  tans:tAnswer,
   setfocus(el){up({focus:mkFocus(el.dataset.g)})},
   editpts(){ui.editPts=!ui.editPts;render()},
   pictgo:pictGo,ppass:pictPass,pdone:()=>pictDone(false),
@@ -1037,13 +1250,13 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v11<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v12<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;
     render()},e=>{console.error(e);S.loaded=true;setup("Can't reach the party database. If you're the host, check the Firestore rules allow reads and writes.")});
   const col=(name,key)=>PARTY.collection(name).onSnapshot(q=>{S[key]=q.docs.map(d=>({id:d.id,...d.data()}));render()},e=>console.error(e));
-  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");col("log","log");col("pguess","pg");
+  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");col("log","log");col("pguess","pg");col("tans","ta");
   PARTY.collection("draw").doc("live").onSnapshot(d=>{S.draw=d.exists?d.data():null;paintCanvases()},()=>{});
   if(ME&&MODE==="phone")PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{});
   if(EASEL){const hb=()=>{if(S.main)PARTY.update({easelSeen:Date.now()}).catch(()=>{})};setTimeout(hb,1500);setInterval(hb,30000);try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}}

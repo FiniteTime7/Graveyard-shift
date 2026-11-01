@@ -625,7 +625,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v13</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v14</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -851,136 +851,56 @@ function vTVPict(){const p=PI();
 /* ================= trivia ================= */
 /* each question: [category, question, correct, wrong, wrong, wrong] */
 const TQ=[
-["Movies","Which film won the very first Academy Award for Best Picture?","Wings","All Quiet on the Western Front","The Jazz Singer","Metropolis"],
-["Movies","In “Jaws,” what's the name of Quint's shark-hunting boat?","Orca","Pequod","Andrea Gail","Black Pearl"],
-["Movies","Which movie has the line “Here's Johnny!”?","The Shining","Psycho","Misery","Carrie"],
-["Movies","Who directed “Get Out”?","Jordan Peele","Ari Aster","James Wan","Mike Flanagan"],
-["Movies","In “The Matrix,” which pill does Neo take?","Red","Blue","Green","White"],
-["Movies","“Toy Story” was the first fully computer-animated feature film from which studio?","Pixar","DreamWorks","Blue Sky","Illumination"],
-["Movies","Who played Jack Dawson in “Titanic”?","Leonardo DiCaprio","Brad Pitt","Matt Damon","Johnny Depp"],
-["Movies","In “Mean Girls,” what colour do they wear on Wednesdays?","Pink","Black","Red","White"],
-["Movies","What does E.T. famously want to do?","Phone home","Eat candy","Ride a bike","Fly to the moon"],
-["Movies","In “Back to the Future,” what speed does the DeLorean need to hit to time travel?","88 mph","77 mph","99 mph","121 mph"],
-["Music","Which band released the album “Abbey Road”?","The Beatles","The Rolling Stones","Pink Floyd","The Who"],
-["Music","What is Lady Gaga's real first name?","Stefani","Stephanie","Gabriella","Alicia"],
-["Music","“Smells Like Teen Spirit” was a hit for which band?","Nirvana","Pearl Jam","Soundgarden","Foo Fighters"],
-["Music","How many keys are on a standard piano?","88","76","92","64"],
-["Music","Beyoncé first found fame in which group?","Destiny's Child","TLC","En Vogue","Spice Girls"],
-["Music","Which rapper's real name is Marshall Mathers?","Eminem","Logic","Mac Miller","Machine Gun Kelly"],
-["Music","“Bohemian Rhapsody” is a song by which band?","Queen","Led Zeppelin","Aerosmith","Journey"],
-["Music","Which artist released the album “Thriller”?","Michael Jackson","Prince","Stevie Wonder","Lionel Richie"],
-["Music","How many strings does a standard guitar have?","6","5","7","8"],
-["Music","Which singer was known as the “Queen of Soul”?","Aretha Franklin","Whitney Houston","Diana Ross","Tina Turner"],
-["TV","In “Friends,” what's the name of the coffee shop?","Central Perk","The Daily Grind","Java Joe's","Monk's Café"],
-["TV","“The Office” (US) is set in which city?","Scranton","Pittsburgh","Akron","Stamford"],
-["TV","What's the name of the town in “Stranger Things”?","Hawkins","Derry","Riverdale","Twin Peaks"],
-["TV","What alias does Walter White use in “Breaking Bad”?","Heisenberg","Einstein","Mr. Pink","The Chemist"],
-["TV","Which family lives at 742 Evergreen Terrace?","The Simpsons","The Griffins","The Belchers","The Smiths"],
-["TV","What's the name of Ross's monkey in “Friends”?","Marcel","Bubbles","Coco","George"],
-["TV","“Squid Game” comes from which country?","South Korea","Japan","China","Thailand"],
-["TV","In “Seinfeld,” what's Kramer's first name?","Cosmo","Kenny","Newman","Elaine"],
-["TV","What's the name of the bar in “The Simpsons”?","Moe's Tavern","Cheers","Paddy's Pub","MacLaren's"],
-["TV","Which show is about a seat called the Iron Throne?","Game of Thrones","The Witcher","Vikings","The Last Kingdom"],
-["Horror","Halloween grew out of which ancient Celtic festival?","Samhain","Beltane","Imbolc","Lughnasadh"],
-["Horror","In Ireland, jack-o'-lanterns were originally carved from what?","Turnips","Pumpkins","Apples","Potatoes"],
-["Horror","Who wrote the novel “Dracula”?","Bram Stoker","Edgar Allan Poe","Mary Shelley","H. P. Lovecraft"],
-["Horror","Who wrote “Frankenstein”?","Mary Shelley","Bram Stoker","Charlotte Brontë","Jane Austen"],
-["Horror","What's the name of the killer doll in “Child's Play”?","Chucky","Annabelle","Billy","Robert"],
-["Horror","What's the name of the masked killer in “Scream”?","Ghostface","Leatherface","The Shape","Pinhead"],
-["Horror","Which famous escape artist died on Halloween?","Harry Houdini","David Copperfield","Harry Blackstone","Howard Thurston"],
-["Horror","What's the fear of Halloween called?","Samhainophobia","Phasmophobia","Coulrophobia","Necrophobia"],
-["Horror","In “The Exorcist,” what's the possessed girl's name?","Regan","Carrie","Samara","Damien"],
-["Horror","Which killer haunts dreams in “A Nightmare on Elm Street”?","Freddy Krueger","Jason Voorhees","Michael Myers","Candyman"],
-["Science","What's the chemical symbol for gold?","Au","Ag","Gd","Go"],
-["Science","Which planet is closest to the sun?","Mercury","Venus","Mars","Earth"],
-["Science","How many bones are in the adult human body?","206","186","212","226"],
-["Science","How many hearts does an octopus have?","3","1","2","4"],
-["Science","What's the largest organ of the human body?","Skin","Liver","Brain","Lungs"],
-["Science","Which gas do plants take in from the air for photosynthesis?","Carbon dioxide","Oxygen","Nitrogen","Helium"],
-["Science","What's the hardest natural substance?","Diamond","Quartz","Titanium","Granite"],
-["Science","Which planet has the most known moons?","Saturn","Jupiter","Uranus","Neptune"],
-["Science","What's the only mammal that can truly fly?","Bat","Flying squirrel","Sugar glider","Colugo"],
-["Science","About how fast does light travel?","300,000 km per second","30,000 km per second","3,000 km per second","3 million km per second"],
-["Geography","What's the capital of Australia?","Canberra","Sydney","Melbourne","Perth"],
-["Geography","What's the largest ocean?","Pacific","Atlantic","Indian","Arctic"],
-["Geography","What's the smallest country in the world?","Vatican City","Monaco","San Marino","Liechtenstein"],
-["Geography","Mount Everest sits on the border of Nepal and which country?","China","India","Bhutan","Pakistan"],
-["Geography","What's the largest hot desert in the world?","Sahara","Arabian","Gobi","Kalahari"],
-["Geography","What's the largest US state by area?","Alaska","Texas","California","Montana"],
-["Geography","Istanbul sits on two continents: Europe and…","Asia","Africa","Australia","Antarctica"],
-["Geography","What's the capital of Iceland?","Reykjavík","Oslo","Helsinki","Nuuk"],
-["Geography","Counting its overseas territories, which country spans the most time zones?","France","Russia","United States","United Kingdom"],
-["Geography","Which country has the most people?","India","China","United States","Indonesia"],
-["History","In which year did the Titanic sink?","1912","1905","1915","1923"],
-["History","Who was the first person to walk on the moon?","Neil Armstrong","Buzz Aldrin","Yuri Gagarin","John Glenn"],
-["History","In which year did the Berlin Wall fall?","1989","1991","1985","1979"],
-["History","Which is the only one of the Seven Wonders of the Ancient World still standing?","Great Pyramid of Giza","Colossus of Rhodes","Hanging Gardens of Babylon","Lighthouse of Alexandria"],
-["History","Which civilization built Machu Picchu?","Inca","Aztec","Maya","Olmec"],
-["History","After Waterloo, Napoleon was exiled to which island?","Saint Helena","Elba","Corsica","Malta"],
-["History","In which year did the Salem witch trials happen?","1692","1592","1776","1812"],
-["History","Which country gave the Statue of Liberty to the United States?","France","England","Spain","Italy"],
-["History","In which year did World War II end?","1945","1944","1946","1939"],
-["History","Cleopatra was the last active ruler of which kingdom?","Egypt","Persia","Greece","Babylon"],
-["Food & drink","What's the main ingredient in guacamole?","Avocado","Lime","Tomato","Pepper"],
-["Food & drink","A margarita is made with which spirit?","Tequila","Vodka","Rum","Gin"],
-["Food & drink","A mojito is made with which spirit?","Rum","Gin","Tequila","Whisky"],
-["Food & drink","What's the most expensive spice by weight?","Saffron","Vanilla","Cardamom","Cinnamon"],
-["Food & drink","Champagne must come from which country?","France","Italy","Spain","Germany"],
-["Food & drink","Marzipan is made mostly from which nut?","Almond","Hazelnut","Cashew","Pistachio"],
-["Food & drink","Which gas gives Guinness its creamy head?","Nitrogen","Carbon dioxide","Oxygen","Helium"],
-["Food & drink","A classic mimosa is sparkling wine and which juice?","Orange","Grapefruit","Peach","Cranberry"],
-["Food & drink","Pizza Margherita's colours match which flag?","Italy","Mexico","Ireland","Hungary"],
-["Food & drink","Sake is brewed from what?","Rice","Barley","Potatoes","Plums"],
-["Sports","How many players does a soccer team have on the field?","11","10","12","9"],
-["Sports","In bowling, what are three strikes in a row called?","A turkey","A hat trick","A triple","A gobbler"],
-["Sports","How long is a marathon?","42.2 km","40 km","26.2 km","50 km"],
-["Sports","Which sport uses a shuttlecock?","Badminton","Squash","Table tennis","Pickleball"],
-["Sports","How many rings are on the Olympic flag?","5","4","6","7"],
-["Sports","What's a perfect score in ten-pin bowling?","300","200","250","500"],
-["Sports","How many NBA championships did Michael Jordan win?","6","5","4","7"],
-["Sports","In golf, what's one stroke under par called?","Birdie","Eagle","Bogey","Albatross"],
-["Sports","In tennis, what's a score of zero called?","Love","Nil","Duck","Zip"],
-["Sports","Which trophy is the oldest awarded in North American pro sports?","Stanley Cup","Vince Lombardi Trophy","Larry O'Brien Trophy","Commissioner's Trophy"],
-["Canada","Which is Canada's only officially bilingual province?","New Brunswick","Quebec","Ontario","Manitoba"],
-["Canada","What's the nickname for Canada's $2 coin?","Toonie","Loonie","Doubloon","Twonie"],
-["Canada","Poutine comes from which province?","Quebec","Ontario","New Brunswick","Nova Scotia"],
-["Canada","Basketball was invented by a Canadian named…","James Naismith","Tim Horton","Wayne Gretzky","Frederick Banting"],
-["Canada","Which Canadian city hosted the 1976 Summer Olympics?","Montreal","Toronto","Vancouver","Calgary"],
-["Canada","What's Canada's national animal?","Beaver","Moose","Canada goose","Polar bear"],
-["Canada","How many provinces does Canada have?","10","13","9","12"],
-["Canada","Which Toronto landmark was the world's tallest free-standing structure for over 30 years?","CN Tower","First Canadian Place","Rogers Centre","Scotia Plaza"],
-["Canada","Which Canadian rapper released “Hotline Bling”?","Drake","The Weeknd","Tory Lanez","NAV"],
-["Canada","What's the capital of Canada?","Ottawa","Toronto","Montreal","Vancouver"],
-["Internet","What was the title of the first video ever uploaded to YouTube?","Me at the zoo","Charlie bit my finger","Hello world","Test upload"],
-["Internet","What does GIF stand for?","Graphics Interchange Format","Graphic Image File","General Image Format","Graphical Internet File"],
-["Internet","Who co-founded Microsoft with Bill Gates?","Paul Allen","Steve Wozniak","Steve Ballmer","Larry Page"],
-["Internet","What was Google's original name?","BackRub","Googol","SearchBot","PageRank"],
-["Internet","Tetris was created in which country?","Soviet Union","Japan","United States","Germany"],
-["Internet","Which song do you hear when you get Rickrolled?","Never Gonna Give You Up","Take On Me","Together Forever","Don't You Want Me"],
-["Internet","What was Mario called in the original “Donkey Kong”?","Jumpman","Plumber","Mr. Video","Super Boy"],
-["Internet","Which company makes the PlayStation?","Sony","Nintendo","Microsoft","Sega"],
-["Internet","What does “www” stand for?","World Wide Web","World Web Wide","Wide World Web","Web World Wide"],
-["Internet","In which year did Facebook launch?","2004","2001","2006","2008"],
-["Weird facts","What's a group of crows called?","A murder","A haunt","A coven","A parliament"],
-["Weird facts","Which animal has fingerprints almost identical to humans?","Koala","Chimpanzee","Raccoon","Sloth"],
-["Weird facts","Which food has been found still edible in ancient Egyptian tombs?","Honey","Bread","Dates","Cheese"],
-["Weird facts","What's the dot over a lowercase “i” called?","A tittle","A jot","A tilde","A pip"],
-["Weird facts","What colour is a polar bear's skin?","Black","White","Pink","Grey"],
-["Weird facts","Botanically speaking, bananas are…","Berries","Nuts","Legumes","Herbs"],
-["Weird facts","Where is a shrimp's heart?","In its head","In its tail","In its legs","It has no heart"],
-["Weird facts","Which planet spins in the opposite direction to most others?","Venus","Mars","Jupiter","Mercury"],
-["Weird facts","What's the most common blood type?","O positive","A positive","B negative","AB positive"],
-["Weird facts","How many noses does a slug have?","4","1","2","0"],
-["Spicy","Which hormone is nicknamed the “love hormone”?","Oxytocin","Adrenaline","Cortisol","Melatonin"],
-["Spicy","Which Roman goddess was the goddess of love?","Venus","Juno","Minerva","Diana"],
-["Spicy","The Kama Sutra comes from which country?","India","China","Egypt","Greece"],
-["Spicy","The word avocado comes from an Aztec word that also meant…","Testicle","Love","Fertile","Green"],
-["Spicy","Casanova was born in which city?","Venice","Rome","Paris","Florence"],
-["Spicy","Viagra was first developed to treat what?","Heart chest pain (angina)","Hair loss","Insomnia","Jet lag"],
-["Spicy","Legend says Casanova ate 50 of what for breakfast?","Oysters","Eggs","Figs","Strawberries"],
-["Spicy","“Fifty Shades of Grey” started as fan fiction of which series?","Twilight","Harry Potter","The Hunger Games","Outlander"],
-["Spicy","Valentine's Day is named after a…","Saint","Roman emperor","Greek god","Poet"],
-["Spicy","In Greek myth, who is the god of desire and son of Aphrodite?","Eros","Hermes","Apollo","Dionysus"]
+["Movies", "Which movie made the line “I'll be back” famous?", "The Terminator", "Predator", "RoboCop", "Total Recall"],
+["Movies", "Who voices Woody in “Toy Story”?", "Tom Hanks", "Tim Allen", "Billy Crystal", "Robin Williams"],
+["Movies", "In “Home Alone,” where is the family flying when they forget Kevin?", "Paris", "London", "Rome", "Chicago"],
+["Movies", "Which was the first non-English-language film to win Best Picture?", "Parasite", "Roma", "Amélie", "Crouching Tiger, Hidden Dragon"],
+["Movies", "In “The Lion King,” what's the name of Simba's father?", "Mufasa", "Scar", "Rafiki", "Zazu"],
+["Music", "Which artist released the album “1989”?", "Taylor Swift", "Katy Perry", "Lorde", "Adele"],
+["Music", "“Mr. Brightside” is by which band?", "The Killers", "The Strokes", "Franz Ferdinand", "Arctic Monkeys"],
+["Music", "Rihanna is from which country?", "Barbados", "Jamaica", "Trinidad and Tobago", "The Bahamas"],
+["Music", "How many Spice Girls were there?", "5", "4", "6", "3"],
+["Music", "Which Canadian released the song “Baby” in 2010?", "Justin Bieber", "Shawn Mendes", "Drake", "Carly Rae Jepsen"],
+["TV", "In “How I Met Your Mother,” what's Barney's last name?", "Stinson", "Mosby", "Eriksen", "Scherbatsky"],
+["TV", "What's the name of the paper company in the US version of “The Office”?", "Dunder Mifflin", "Initech", "Vandelay Industries", "Pied Piper"],
+["TV", "In “Schitt's Creek,” what's the name of the Rose family's daughter?", "Alexis", "Stevie", "Twyla", "Jocelyn"],
+["TV", "“The Sopranos” is set mainly in which US state?", "New Jersey", "New York", "Pennsylvania", "Connecticut"],
+["TV", "In “The Big Bang Theory,” who does Sheldon marry?", "Amy", "Penny", "Bernadette", "Leslie"],
+["Horror", "What's the name of the hockey-masked killer in “Friday the 13th”?", "Jason Voorhees", "Michael Myers", "Freddy Krueger", "Victor Crowley"],
+["Horror", "In “The Silence of the Lambs,” what was Hannibal Lecter's job?", "Psychiatrist", "Surgeon", "Chef", "Dentist"],
+["Horror", "Which Stephen King novel features Pennywise the clown?", "It", "Carrie", "Cujo", "Misery"],
+["Horror", "What's the name of the Addams Family's butler?", "Lurch", "Fester", "Gomez", "Cousin Itt"],
+["Horror", "In vampire legends, which plant keeps vampires away?", "Garlic", "Basil", "Lavender", "Mint"],
+["Science", "What's the most common gas in Earth's air?", "Nitrogen", "Oxygen", "Carbon dioxide", "Argon"],
+["Science", "What does DNA stand for?", "Deoxyribonucleic acid", "Dynamic nuclear acid", "Diribonucleic acid", "Deoxyribonuclear atom"],
+["Science", "Which planet is called the Red Planet?", "Mars", "Jupiter", "Venus", "Mercury"],
+["Science", "At what temperature does water freeze in Fahrenheit?", "32°", "0°", "10°", "45°"],
+["Science", "Which blood cells fight infection?", "White blood cells", "Red blood cells", "Platelets", "Plasma cells"],
+["Geography", "What's the capital of New Zealand?", "Wellington", "Auckland", "Christchurch", "Queenstown"],
+["Geography", "Marrakech is in which country?", "Morocco", "Egypt", "Tunisia", "Algeria"],
+["Geography", "Which river runs through Paris?", "Seine", "Rhine", "Loire", "Danube"],
+["Geography", "What's the largest country by area?", "Russia", "Canada", "China", "United States"],
+["Geography", "Niagara Falls sits between Ontario and which US state?", "New York", "Michigan", "Ohio", "Pennsylvania"],
+["History", "Who painted the Mona Lisa?", "Leonardo da Vinci", "Michelangelo", "Raphael", "Botticelli"],
+["History", "Which ship carried the Pilgrims to America in 1620?", "Mayflower", "Santa María", "Endeavour", "Bounty"],
+["History", "Who was the UK's first female Prime Minister?", "Margaret Thatcher", "Theresa May", "Liz Truss", "Queen Victoria"],
+["History", "Which volcano buried Pompeii?", "Vesuvius", "Etna", "Stromboli", "Krakatoa"],
+["History", "The ancient Olympic Games began in which country?", "Greece", "Italy", "Egypt", "Turkey"],
+["Food & drink", "What's the main ingredient in hummus?", "Chickpeas", "Lentils", "Fava beans", "Peanuts"],
+["Food & drink", "Gouda cheese comes from which country?", "Netherlands", "Switzerland", "France", "Belgium"],
+["Food & drink", "A Moscow Mule is made with which spirit?", "Vodka", "Gin", "Rum", "Tequila"],
+["Food & drink", "The Caesar cocktail, invented in Calgary, uses which juice?", "Clamato", "Cranberry", "Pineapple", "Grapefruit"],
+["Food & drink", "Calvados brandy is made from which fruit?", "Apples", "Pears", "Plums", "Grapes"],
+["Sports", "How many points is a touchdown worth?", "6", "7", "3", "5"],
+["Sports", "What surface is Wimbledon played on?", "Grass", "Clay", "Hard court", "Carpet"],
+["Sports", "What jersey number did Wayne Gretzky wear?", "99", "66", "87", "19"],
+["Sports", "How many players per team are on a basketball court at once?", "5", "6", "7", "4"],
+["Sports", "The Masters is a major tournament in which sport?", "Golf", "Tennis", "Snooker", "Darts"],
+["Wild card", "What's a group of owls called?", "A parliament", "A murder", "A flock", "A coven"],
+["Wild card", "What's the national animal of Scotland?", "Unicorn", "Lion", "Stag", "Golden eagle"],
+["Wild card", "The gluteus maximus is in which part of the body?", "Butt", "Thigh", "Back", "Shoulder"],
+["Wild card", "Which city is famous for its Red Light District?", "Amsterdam", "Berlin", "Copenhagen", "Brussels"],
+["Wild card", "Which food is often called the most stolen food in the world?", "Cheese", "Chocolate", "Steak", "Bread"]
 ];
 const TCATS=[...new Set(TQ.map(q=>q[0]))];
 const T_SECS=20,T_REVEAL=7000,T_QS=10;
@@ -990,7 +910,7 @@ const sigT=d=>d.trivia?(d.trivia.status+":"+(d.trivia.game||0)+":"+(d.trivia.qi|
 const triviaPlayers=()=>inRoom("trivia","main");
 const tKey=t=>t.game+":"+t.qi;
 function tQ(t){const e=(t.qs||[])[t.qi];if(!e)return null;const q=TQ[e.i];return {cat:q[0],text:q[1],opts:e.ord.map(k=>q[2+k]),right:e.ord.indexOf(0)}}
-function pickTrivia(){let used=(S.main.triviaUsed||[]).filter(i=>i<TQ.length);if(TQ.length-used.length<T_QS)used=[];
+function pickTrivia(){let used=(S.main.triviaUsed2||[]).filter(i=>i<TQ.length);if(TQ.length-used.length<T_QS)used=[];
   const byCat={};TQ.forEach((q,i)=>{if(!used.includes(i))(byCat[q[0]]=byCat[q[0]]||[]).push(i)});
   const out=[];let cats=shuffle(Object.keys(byCat)),last=null;
   while(out.length<T_QS){if(!cats.length)cats=shuffle(Object.keys(byCat).filter(c=>byCat[c].length));if(!cats.length)break;
@@ -999,7 +919,7 @@ function pickTrivia(){let used=(S.main.triviaUsed||[]).filter(i=>i<TQ.length);if
   return {qs:out.map(i=>({i,ord:shuffle([0,1,2,3])})),used:used.concat(out)}}
 function startTrivia(){if(triviaActive())return;if(pictActive()){toast("Finish Pictionary first");return}if(triviaPlayers().length<2){toast("Trivia needs at least 2 players");return}
   const pk=pickTrivia(),now=Date.now();
-  return guarded(sigT,{trivia:{status:"q",game:(TI().game||0)+1,qi:0,qs:pk.qs,startAt:now,results:{},right:{},last:null},triviaUsed:pk.used,focus:mkFocus("trivia")})}
+  return guarded(sigT,{trivia:{status:"q",game:(TI().game||0)+1,qi:0,qs:pk.qs,startAt:now,results:{},right:{},last:null},triviaUsed2:pk.used,focus:mkFocus("trivia")})}
 function tAnswers(t){const k=tKey(t),ps=triviaPlayers();return S.ta.filter(a=>a.key===k&&ps.includes(a.id))}
 function tRevealPlan(t){const q=tQ(t),ans=tAnswers(t),counts=[0,0,0,0];ans.forEach(a=>{if(a.a>=0&&a.a<4)counts[a.a]++});
   const right=ans.filter(a=>a.a===q.right).sort((a,b)=>a.at-b.at).map(a=>a.id),o={"trivia.status":"reveal","trivia.revealAt":Date.now(),"trivia.last":{qi:t.qi,counts,right}};
@@ -1243,7 +1163,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v13<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v14<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

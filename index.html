@@ -256,14 +256,7 @@ unhinged:[
 "Freestyle rap about {o}'s costume for 30 seconds.",
 "Give {o} your phone for 60 seconds, unlocked. They can do one harmless thing."
 ]};
-const HOT=[
-"die first in a horror movie","accidentally summon a demon","be the killer and get away with it","cry before the night is over",
-"get kicked out of a haunted house","still be here at 4am","text an ex tonight","marry a vampire",
-"survive the zombie apocalypse the longest","secretly be a witch","scream first at a jump scare","spend the most on a costume and still lose",
-"befriend the ghost instead of running","start a cult","lose their phone tonight","trip while running from the killer",
-"split the group up to cover more ground","go investigate the noise in the basement","be found asleep in the bathtub",
-"have the most cursed search history","sell their soul for free drinks","get possessed and not notice","hook up at this party",
-"read the forbidden book out loud","eat all the Halloween candy before the kids show up"];
+const HOT=["get arrested before sunrise", "hook up with someone in this room", "have a secret OnlyFans", "cry during sex", "text an ex before 4am", "get kicked out of a bar", "lie about their body count", "sext the wrong person", "marry someone they met tonight", "get caught hooking up in public", "drunk-call their mom tonight", "fake it in bed", "have a secret crush on someone here", "throw up before 4am", "wake up next to a stranger", "lie about their age on a dating app", "still be drunk at brunch tomorrow", "start a fight over nothing", "have a kink nobody would guess", "get a tattoo they instantly regret", "go home wearing someone else's costume", "send a nude to the wrong person", "cheat at a board game", "date someone twice their age", "forget someone's name mid-hookup", "get lost walking home", "have a secret sex tape", "be the villain in the horror movie", "marry for money", "go viral for something embarrassing", "still sleep in their ex's hoodie", "hook up in a bathroom at a party", "ghost someone after one date", "be the first to take their clothes off", "have a crush on a cartoon character", "crash a wedding", "eat food off the floor tonight", "spend rent money on a night out", "get a lap dance and pretend they hated it", "sleep through their alarm and blame their phone", "make out with someone here before sunrise", "lie during this exact game", "secretly be into feet", "accidentally like an ex's photo from 2016", "get catfished", "join a cult for the free snacks", "go skinny dipping in November", "have a burner Instagram", "get banned from a dating app", "propose while drunk"];
 const METHODS=[
 "Get them to say the word “candy”.","Get them to take something from your hand.","Get them to clink glasses with you.",
 "Get them to take a selfie with you.","Get them to tell you what time it is.","Get them to high-five you.",
@@ -384,9 +377,9 @@ function planDare(r="main"){
   return {[CUR(r)]:{type:"dare",pid,lvl:lv,text:pool[idx].replace(/\{o\}/g,nm(o)),at:Date.now()},["dareCount."+pid]:FV.increment(1),["dareUsed."+lv]:used.concat(idx)};
 }
 function planHot(r="main"){if(inRoom("hot",r).length<3)return null;
-  let used=(S.main.hotUsed||[]).filter(i=>i<HOT.length);if(used.length>=HOT.length)used=[];
+  let used=(S.main.hotUsed2||[]).filter(i=>i<HOT.length);if(used.length>=HOT.length)used=[];
   const i=rnd(HOT.map((_,i)=>i).filter(i=>!used.includes(i)));
-  return {[CUR(r)]:{type:"hot",q:HOT[i],qid:"q"+Date.now()+r,win:null,at:Date.now()},hotUsed:used.concat(i)}}
+  return {[CUR(r)]:{type:"hot",q:HOT[i],qid:"q"+Date.now()+r,win:null,at:Date.now()},hotUsed2:used.concat(i)}}
 function planHotReveal(r="main"){const c=curOf(r);if(!c||c.type!=="hot"||c.win)return null;const t={};hotThisQ(r).forEach(h=>{t[h.pick]=(t[h.pick]||0)+1});
   const top=Math.max(0,...Object.values(t)),win=Object.keys(t).filter(id=>t[id]===top&&top>0);
   const o={[CUR(r)+".win"]:win,[CUR(r)+".tally"]:Object.entries(t).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v).slice(0,5)};
@@ -632,7 +625,7 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v12</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v13</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
 function renderInner(){
   if(!S.loaded)return;
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
@@ -1250,7 +1243,7 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v12<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v13<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;

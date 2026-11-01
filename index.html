@@ -27,6 +27,7 @@ const FIREBASE_CONFIG = {
 /* The host opens the site with #host-<HOST_KEY> at the end of the link. Keep it secret. */
 const HOST_KEY = "hexed-4k9t2";
 const PARTY_ID = "halloween-2026";
+const APP_V = 15;
 </script>
 <style>
 :root{
@@ -184,6 +185,9 @@ button.topt[disabled]:not([aria-pressed="true"]){opacity:.4}
 .tq{font-size:clamp(26px,3.4vw,64px);font-weight:700;line-height:1.15;text-wrap:balance}
 .topts.big .topt{font-size:clamp(18px,2.2vw,40px);min-height:clamp(70px,11vh,150px)}
 .topts.big .topt b{width:clamp(32px,3vw,56px);height:clamp(32px,3vw,56px);font-size:clamp(16px,1.6vw,28px)}
+.updbar{position:fixed;left:0;right:0;top:0;z-index:70;display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--ember);color:#1a0d05;font-weight:700;
+  padding:calc(8px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.updbar .btn{background:#1a0d05;color:var(--bone)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -276,7 +280,7 @@ const uid=()=>"p"+Math.random().toString(36).slice(2,9);
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 function toast(t){const el=document.createElement("div");el.className="toast";el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
 const defaults=()=>({created:Date.now(),players:{},cats:JSON.parse(JSON.stringify(CATS)),killerCount:1,
-  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null,pict:{status:"off",game:0},trivia:{status:"off",game:0},pictDeck:"mix",sab:{last:{},hit:{}},event:null,awards:null});
+  reveal:null,killer:{status:"off",round:0,seen:[],dead:[],result:null},points:{},titles:{},dareCount:{},dareLevel:"auto",current:null,pict:{status:"off",game:0},quiz:{status:"off",game:0},pictDeck:"mix",sab:{last:{},hit:{}},event:null,awards:null});
 
 /* ================= app state ================= */
 const hash=location.hash.replace(/^#/,"");
@@ -285,7 +289,7 @@ const EASEL=MODE==="easel";
 if(hash==="host-"+HOST_KEY)ls.set("gs-host-"+PARTY_ID,"1");
 const IS_HOST=(hash==="host-"+HOST_KEY||ls.get("gs-host-"+PARTY_ID)==="1")&&MODE==="phone";
 let ME=ls.get("gs-me-"+PARTY_ID);
-const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null,log:[],pg:[],draw:null,ta:[]};
+const S={main:null,loaded:false,ballots:[],acc:[],hot:[],role:null,log:[],pg:[],draw:null,ta:[],qa:[]};
 const ui={tab:"live",flow:null,draft:{},accPick:null,editPts:false,revealShown:null,hotUsed:[],used:{mild:[],spicy:[],unhinged:[]}};
 let FS,PARTY,FV;
 
@@ -403,7 +407,7 @@ function fmtTime(at){if(!at)return"";const [h,m]=at.split(":").map(Number);retur
 let ticking=false;
 async function autoTick(){
   if(!S.main||ticking||!PARTY)return;const A=AUTO();if(!A.on)return;ticking=true;
-  try{
+  try{try{
     const now=Date.now(),m=S.main,R=m.reveal;
     if(!R&&dueClock(A.revealAt)&&recentActivity()&&ballotCount()>=2){await revealWrite();return}
     if(R&&!R.done){if(now-(R.stepAt||R.nonce)>12000){const last=R.step>=R.results.length-1;
@@ -421,12 +425,12 @@ async function autoTick(){
       else if(k.status==="accusing"){if(accThisRound().length>=kp.length||now-(k.at||now)>4*60000){const exp=sigK(m),o=await planUnmask();if(o)await guarded(sigK,o,unmaskLog(o),exp)}}
       else if(k.status==="revealed"&&now-(k.at||now)>10*60000){const r=buildRoles();if(r)await guarded(sigK,r.o,t=>r.roles.forEach(([id,d])=>t.set(PARTY.collection("roles").doc(id),d)))}
     }
-  }finally{ticking=false}
+  }catch(e){console.warn("autopilot tick",e)}}finally{ticking=false}
 }
 async function clearCol(name){const s=await PARTY.collection(name).get();let b=FS.batch(),n=0;
   for(const d of s.docs){b.delete(d.ref);if(++n===450){await b.commit();b=FS.batch();n=0}}if(n)await b.commit()}
 async function hostReset(keepGuests){
-  try{await Promise.all(["ballots","acc","hotvotes","roles","log","pguess","draw","tans"].map(clearCol));
+  try{await Promise.all(["ballots","acc","hotvotes","roles","log","pguess","draw","tans","qans"].map(clearCol));
     const d=defaults();if(keepGuests){d.players=S.main.players;d.cats=S.main.cats;d.killerCount=S.main.killerCount;if(S.main.auto)d.auto=S.main.auto;d.pictDeck=S.main.pictDeck||"mix"}
     await PARTY.set(d);ui.flow=null;toast(keepGuests?"Games reset. Guests kept.":"Party wiped.")}catch(e){err(e)}
 }
@@ -625,9 +629,16 @@ function drawQR(){const el=document.getElementById("qr");if(!el||!window.QRCode)
   if(qrNode.parentNode!==el){el.innerHTML="";el.appendChild(qrNode)}}
 function put(el,h){if(!el||el._h===h)return false;el._h=h;el.innerHTML=h;return true}
 function setup(msg){document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Almost alive</h2><p>${msg}</p></div>`}
-function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v14</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function render(){if(holdEl||peeking||drawingNow){pendingRender=true;return}pendingRender=false;try{renderInner()}catch(e){console.error(e);const m=document.getElementById("main");if(m)m._h=null;if(m)m.innerHTML=`<div class="panel stack"><h2>Something broke</h2><p class="mono muted">${esc(e&&e.message)} · v15</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}}
+function versionCheck(){if(!S.main||!PARTY)return;const v=S.main.appV||0;
+  if(v<APP_V&&!ui.verSet){ui.verSet=true;PARTY.update({appV:APP_V}).catch(()=>{})}
+  if(v>APP_V&&!ui.verWarned){ui.verWarned=true;const go=()=>location.replace(location.pathname+"?v="+v+location.hash);
+    let tried=null;try{tried=sessionStorage.getItem("gs-reload")}catch(e){}
+    if((MODE==="tv"||EASEL)&&tried!==String(v)){try{sessionStorage.setItem("gs-reload",String(v))}catch(e){}setTimeout(go,4000);toast("Updating to the newest version…");return}
+    const bar=document.createElement("div");bar.className="updbar";bar.innerHTML=`<span>A newer version of the party is out.</span><button class="btn" style="width:auto;padding:8px 14px;font-size:15px">Update</button>`;
+    bar.querySelector&&bar.querySelector("button")&&(bar.querySelector("button").onclick=go);document.body.appendChild(bar)}}
 function renderInner(){
-  if(!S.loaded)return;
+  if(!S.loaded)return;versionCheck();
   const main=document.getElementById("main"),layer=document.getElementById("layer"),tabs=document.getElementById("tabs");
   if(!S.main){
     tabs.hidden=true;
@@ -648,7 +659,8 @@ function renderInner(){
   const PP=PI();if(PP.status==="ready"&&PP.drawer===ME&&ui.autoSw!==PP.turn){ui.autoSw=PP.turn;ui.tab="pict";buzz()}
   const EV=S.main.event;if(EV&&EV.target===ME&&ui.evBuzz!==EV.at&&Date.now()-EV.at<60000){ui.evBuzz=EV.at;buzz();toast("😈 You've been sabotaged!")}
   const v={live:vLive,vote:vVote,killer:vKiller,pict:vPict,board:vBoard,host:vHost,recap:vRecap}[ui.tab]||vLive;
-  put(main,meName||ui.tab==="host"?v():vJoin());
+  let html;try{html=meName||ui.tab==="host"?v():vJoin()}catch(e){console.error(e);html=`<div class="panel stack"><h2>This screen hit a snag</h2><p class="muted" style="margin:0">Try another tab, or reload.</p><p class="mono muted" style="margin:0">${esc(e&&e.message)}</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>`}
+  put(main,html);
   if(keep){const i=document.getElementById(keep);if(i){if(kv!=null&&i.value!==kv)i.value=kv;i.focus()}}
   renderOverlay();drawQR();attachCanvases();
 }
@@ -734,13 +746,17 @@ function pictGuessers(p){return pictPlayers().filter(id=>id!==p.drawer)}
 let pticking=false;
 async function alwaysTick(){if(!S.main||pticking||!PARTY)return;pticking=true;try{
   const p=PI(),now=Date.now();
+  try{
   if(p.status==="drawing"){const g=pictGuessers(p),n=S.pg.filter(x=>x.turn===p.turn&&x.ok&&g.includes(x.id)).length;
     if(g.length&&n>=g.length){const f=finishPlan(p);await guarded(sigP,f.o,f.extra)}}
   else if(p.status==="reveal"&&now-p.revealAt>7000)await writeTurn(nextDrawerPlan(p));
-  await triviaTick(now);
+  }catch(e){console.warn("pict tick",e)}
+  try{await triviaTick()}catch(e){console.warn("trivia tick",e)}
+  try{
   const A=AUTO(),W=S.main.awards;
   if(!W){if(dueClock(A.awardsAt)&&recentActivity()&&ids().length>=2)await awardsWrite()}
   else if(!W.done&&now-(W.stepAt||W.nonce)>10000){const last=W.step>=W.list.length-1;await guarded(sigW,last?{"awards.done":true}:{"awards.step":W.step+1,"awards.stepAt":now})}
+  }catch(e){console.warn("awards tick",e)}
 }finally{pticking=false}}
 function pictGo(){const p=PI();if(p.status!=="ready"||!iDraw(p))return;ui.strokes=[];ui.pturn=p.turn;ui.got=[];guarded(sigP,{"pict.status":"drawing","pict.startedAt":Date.now()})}
 function pictPass(){const p=PI();if(p.status!=="drawing"||!iDraw(p))return;const pk=pickWord();ui.strokes=[];pushStrokes(true);paintCanvases();
@@ -903,61 +919,74 @@ const TQ=[
 ["Wild card", "Which food is often called the most stolen food in the world?", "Cheese", "Chocolate", "Steak", "Bread"]
 ];
 const TCATS=[...new Set(TQ.map(q=>q[0]))];
-const T_SECS=20,T_REVEAL=7000,T_QS=10;
-const TI=()=>Object.assign({status:"off",game:0},S.main&&S.main.trivia||{});
-const triviaActive=()=>["q","reveal"].includes(TI().status);
-const sigT=d=>d.trivia?(d.trivia.status+":"+(d.trivia.game||0)+":"+(d.trivia.qi||0)):"off:0:0";
+const T_QS=10;
+/* Trivia lives under "quiz" so phones still running an older version (which used "trivia" with a timer) can't interfere. */
+const TI=()=>Object.assign({status:"off",game:0},S.main&&S.main.quiz||{});
+const triviaActive=()=>["ask","show"].includes(TI().status);
+const sigT=d=>{const z=(d&&d.quiz)||{};return (z.status||"off")+":"+(z.game||0)+":"+(z.qi||0)};
 const triviaPlayers=()=>inRoom("trivia","main");
-const tKey=t=>t.game+":"+t.qi;
-function tQ(t){const e=(t.qs||[])[t.qi];if(!e)return null;const q=TQ[e.i];return {cat:q[0],text:q[1],opts:e.ord.map(k=>q[2+k]),right:e.ord.indexOf(0)}}
-function pickTrivia(){let used=(S.main.triviaUsed2||[]).filter(i=>i<TQ.length);if(TQ.length-used.length<T_QS)used=[];
+const tKey=t=>(t.game||0)+":"+(t.qi||0);
+function tQ(t){const e=(t.qs||[])[t.qi||0];if(!e||!Array.isArray(e.ord)||e.ord.length!==4)return null;const q=TQ[e.i];if(!q)return null;
+  return {cat:q[0],text:q[1],opts:e.ord.map(k=>q[2+k]),right:e.ord.indexOf(0)}}
+function pickTrivia(){let used=(S.main.quizUsed||[]).filter(i=>i<TQ.length);if(TQ.length-used.length<T_QS)used=[];
   const byCat={};TQ.forEach((q,i)=>{if(!used.includes(i))(byCat[q[0]]=byCat[q[0]]||[]).push(i)});
-  const out=[];let cats=shuffle(Object.keys(byCat)),last=null;
-  while(out.length<T_QS){if(!cats.length)cats=shuffle(Object.keys(byCat).filter(c=>byCat[c].length));if(!cats.length)break;
+  const out=[];let cats=shuffle(Object.keys(byCat)),last=null,guard=0;
+  while(out.length<T_QS&&guard++<200){if(!cats.length)cats=shuffle(Object.keys(byCat).filter(c=>byCat[c].length));if(!cats.length)break;
     let c=cats.shift();if(c===last&&cats.length){cats.push(c);c=cats.shift()}
-    const pool=byCat[c];if(!pool||!pool.length)continue;const i=pool.splice(Math.floor(Math.random()*pool.length),1)[0];out.push(i);last=c}
+    const pool=byCat[c];if(!pool||!pool.length)continue;out.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);last=c}
   return {qs:out.map(i=>({i,ord:shuffle([0,1,2,3])})),used:used.concat(out)}}
 function startTrivia(){if(triviaActive())return;if(pictActive()){toast("Finish Pictionary first");return}if(triviaPlayers().length<2){toast("Trivia needs at least 2 players");return}
-  const pk=pickTrivia(),now=Date.now();
-  return guarded(sigT,{trivia:{status:"q",game:(TI().game||0)+1,qi:0,qs:pk.qs,startAt:now,results:{},right:{},last:null},triviaUsed2:pk.used,focus:mkFocus("trivia")})}
-function tAnswers(t){const k=tKey(t),ps=triviaPlayers();return S.ta.filter(a=>a.key===k&&ps.includes(a.id))}
-function tRevealPlan(t){const q=tQ(t),ans=tAnswers(t),counts=[0,0,0,0];ans.forEach(a=>{if(a.a>=0&&a.a<4)counts[a.a]++});
-  const right=ans.filter(a=>a.a===q.right).sort((a,b)=>a.at-b.at).map(a=>a.id),o={"trivia.status":"reveal","trivia.revealAt":Date.now(),"trivia.last":{qi:t.qi,counts,right}};
-  right.forEach((id,i)=>{const n=i===0?2:1;o["points."+id]=FV.increment(n);o["trivia.results."+id]=FV.increment(n);o["trivia.right."+id]=FV.increment(1)});return o}
-function tNextPlan(t){if(t.qi+1<(t.qs||[]).length)return {"trivia.status":"q","trivia.qi":t.qi+1,"trivia.startAt":Date.now(),"trivia.last":null};
-  const r=t.results||{},top=Math.max(0,...Object.values(r)),win=Object.keys(r).filter(id=>r[id]===top&&top>0&&S.main.players[id]),o={"trivia.status":"done","trivia.doneAt":Date.now(),"trivia.winners":win};
+  const pk=pickTrivia();if(!pk.qs.length){toast("Couldn't load questions");return}
+  return guarded(sigT,{quiz:{status:"ask",game:(TI().game||0)+1,qi:0,qs:pk.qs,askAt:Date.now(),results:{},right:{},last:null},quizUsed:pk.used,focus:mkFocus("trivia")})
+    .then(ok=>{if(!ok)toast("Someone else just started it. Hang on.")})}
+function tAnswers(t){const k=tKey(t),ps=triviaPlayers();return (S.qa||[]).filter(a=>a.key===k&&ps.includes(a.id))}
+function tShowPlan(t){const q=tQ(t);if(!q)return null;const ans=tAnswers(t),counts=[0,0,0,0];ans.forEach(a=>{if(a.a>=0&&a.a<4)counts[a.a]++});
+  const right=ans.filter(a=>a.a===q.right).sort((a,b)=>a.at-b.at).map(a=>a.id),o={"quiz.status":"show","quiz.showAt":Date.now(),"quiz.last":{qi:t.qi,counts,right}};
+  right.forEach((id,i)=>{const n=i===0?2:1;o["points."+id]=FV.increment(n);o["quiz.results."+id]=FV.increment(n);o["quiz.right."+id]=FV.increment(1)});return o}
+function tNextPlan(t){if((t.qi||0)+1<(t.qs||[]).length)return {"quiz.status":"ask","quiz.qi":(t.qi||0)+1,"quiz.askAt":Date.now(),"quiz.last":null};
+  const r=t.results||{},top=Math.max(0,...Object.values(r)),win=Object.keys(r).filter(id=>r[id]===top&&top>0&&S.main.players[id]),o={"quiz.status":"done","quiz.doneAt":Date.now(),"quiz.winners":win};
   win.forEach(id=>{o["points."+id]=FV.increment(3)});return o}
-async function triviaTick(now){const t=TI();
-  if(t.status==="q"){const N=triviaPlayers().length,n=tAnswers(t).length;if(now-t.startAt>T_SECS*1000||(N&&n>=N))await guarded(sigT,tRevealPlan(t))}
-  else if(t.status==="reveal"&&now-t.revealAt>T_REVEAL){const o=tNextPlan(t);await guarded(sigT,o,o["trivia.status"]==="done"?tt=>logT(tt,{type:"trivia",results:t.results||{},right:t.right||{},winners:o["trivia.winners"]}):null)}}
-function triviaEnd(){const t=TI();if(!triviaActive())return;guarded(sigT,{"trivia.status":"done","trivia.doneAt":Date.now(),"trivia.winners":[]})}
-function tAnswer(el){const t=TI();if(t.status!=="q"||isOut(ME,"trivia")||myRoom()!=="main")return;if(S.ta.some(a=>a.id===ME&&a.key===tKey(t)))return;
-  PARTY.collection("tans").doc(ME).set({key:tKey(t),a:+el.dataset.a,at:Date.now()}).then(()=>buzz()).catch(err)}
+/* only automatic step: show the answer once every player has answered */
+async function triviaTick(){const t=TI();if(t.status!=="ask")return;
+  if(!tQ(t)){await guarded(sigT,{"quiz.status":"done","quiz.doneAt":Date.now(),"quiz.winners":[]});return}
+  const N=triviaPlayers().length,n=tAnswers(t).length;if(N&&n>=N){const o=tShowPlan(t);if(o)await guarded(sigT,o)}}
+function tReveal(){const t=TI();if(t.status!=="ask")return;const o=tShowPlan(t);if(o)guarded(sigT,o);else triviaEnd()}
+function tNext(){const t=TI();if(t.status!=="show")return;const o=tNextPlan(t);
+  guarded(sigT,o,o["quiz.status"]==="done"?tt=>logT(tt,{type:"trivia",results:t.results||{},right:t.right||{},winners:o["quiz.winners"]}):null)}
+function triviaEnd(){if(!triviaActive())return;guarded(sigT,{"quiz.status":"done","quiz.doneAt":Date.now(),"quiz.winners":[]})}
+function tAnswer(el){const t=TI();if(t.status!=="ask"||!ME||isOut(ME,"trivia")||myRoom()!=="main")return;if((S.qa||[]).some(a=>a.id===ME&&a.key===tKey(t)))return;
+  const a=+el.dataset.a;if(!(a>=0&&a<4))return;
+  PARTY.collection("qans").doc(ME).set({key:tKey(t),a,at:Date.now()}).then(()=>buzz()).catch(err)}
 const TLET=["A","B","C","D"],TCOL=["#ff7a1a","#9b7bd4","#a6c46f","#e0475a"];
 function tTally(t,lim){const r=Object.entries(t.results||{}).filter(([id])=>S.main.players[id]).sort((a,b)=>b[1]-a[1]).slice(0,lim||99);
-  return r.length?`<div class="lb">${r.map(([id,v],i)=>`<div class="r ${i===0?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(id))}<small>${(t.right||{})[id]||0} right</small></span><span class="pts">${v}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">Nobody scored. Big brains only.</p>`}
+  return r.length?`<div class="lb">${r.map(([id,v],i)=>`<div class="r ${i===0?"top":""}"><span class="n">${i+1}</span><span class="nm">${esc(nm(id))}<small>${(t.right||{})[id]||0} right</small></span><span class="pts">${v}</span></div>`).join("")}</div>`:`<p class="muted" style="margin:0">No points yet.</p>`}
+function tWaiting(t){const done=tAnswers(t).map(a=>a.id);return triviaPlayers().filter(id=>!done.includes(id))}
 function triviaStartPanel(){const t=TI(),N=triviaPlayers().length;
-  return `<div class="panel stack" style="margin-bottom:12px"><div class="award">🧠 Trivia</div><p class="muted" style="margin:0;font-size:14px">10 questions across ${TCATS.length} categories, never the same one twice in a row. Answer on your phone. First right answer +2, other right answers +1, game winner +3.</p>
+  return `<div class="panel stack" style="margin-bottom:12px"><div class="award">🧠 Trivia</div><p class="muted" style="margin:0;font-size:14px">10 questions, one from each of ${TCATS.length} categories. No timer: the answer shows once everyone's in, or when someone taps Reveal. First right answer +2, other right answers +1, game winner +3.</p>
   ${t.status==="done"&&t.game?`<b>Last game</b>${tTally(t,5)}`:""}
-  ${hold("tstart",t.game?"Play trivia again":"Start trivia","",N<2?"Need at least 2 players":"Hold 1.3s · anyone can",N<2||pictActive())}</div>`}
-function vTrivia(){const t=TI(),q=tQ(t),mine=S.ta.find(a=>a.id===ME&&a.key===tKey(t)),out=isOut(ME,"trivia"),end=`<div style="height:14px"></div>${hold("tend","End trivia","ghost","Hold 1.3s · anyone can")}`;
-  if(!q)return "";
-  const head=`<div class="award" style="display:flex;justify-content:space-between;gap:10px"><span>Question ${t.qi+1} of ${(t.qs||[]).length} · ${esc(q.cat)}</span>${t.status==="q"?`<span style="color:var(--ember)">⏱ <b data-ends="${t.startAt+T_SECS*1000}"></b></span>`:""}</div>`;
-  const qtext=`<div class="card" style="min-height:0"><div class="what" style="font-size:22px">${esc(q.text)}</div></div>`;
-  if(t.status==="q"){
-    const btns=out?`<p class="muted">You're sitting out of trivia. Watch the TV.</p>`:q.opts.map((o,i)=>`<button class="topt" data-act="tans" data-a="${i}" ${mine?"disabled":""} aria-pressed="${mine&&mine.a===i}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span></button>`).join("");
-    return `<h2>Trivia</h2>${head}${qtext}<div class="topts">${btns}</div>${mine?`<p class="muted" style="text-align:center">Locked in. Waiting for everyone…</p>`:""}${end}`}
-  const L=t.last||{},ok=mine&&mine.a===q.right,first=(L.right||[])[0]===ME;
+  ${hold("tstart",t.game?"Play trivia again":"Start trivia","",N<2?"Need at least 2 players":pictActive()?"Finish Pictionary first":"Hold 1.3s · anyone can",N<2||pictActive())}</div>`}
+function vTrivia(){const t=TI(),q=tQ(t),out=isOut(ME,"trivia"),end=`<div style="height:14px"></div>${hold("tend","End trivia","ghost","Hold 1.3s · anyone can")}`;
+  if(!q)return `<h2>Trivia</h2><div class="panel stack"><b>This trivia game can't load.</b><p class="muted" style="margin:0">It was started on an older version. End it and start a fresh one.</p></div>${end}`;
+  const mine=(S.qa||[]).find(a=>a.id===ME&&a.key===tKey(t)),total=(t.qs||[]).length,last=(t.qi||0)+1>=total;
+  const head=`<div class="award">Question ${(t.qi||0)+1} of ${total} · ${esc(q.cat)}</div>`;
+  const qtext=`<div class="card" style="min-height:0;margin-top:8px"><div class="what" style="font-size:22px">${esc(q.text)}</div></div>`;
+  if(t.status==="ask"){const wait=tWaiting(t),n=triviaPlayers().length-wait.length;
+    const btns=out?`<p class="muted">You're sitting out of trivia. Watch the TV.</p>`:q.opts.map((o,i)=>`<button class="topt" data-act="tans" data-a="${i}" ${mine?"disabled":""} aria-pressed="${!!mine&&mine.a===i}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span></button>`).join("");
+    return `<h2>Trivia</h2>${head}${qtext}<div class="topts">${btns}</div>
+      <p class="muted" style="text-align:center;margin-top:12px">${mine?"Locked in. ":""}${n} of ${triviaPlayers().length} answered${wait.length&&wait.length<=4?` · waiting on ${wait.map(id=>esc(nm(id))).join(", ")}`:""}</p>
+      ${hold("treveal","Reveal the answer","ghost","Hold 1.3s · don't wait for slowpokes")}${end}`}
+  const L=t.last||{},ok=!!mine&&mine.a===q.right,first=(L.right||[])[0]===ME;
   return `<h2>Trivia</h2>${head}${qtext}<div class="topts">${q.opts.map((o,i)=>`<div class="topt ${i===q.right?"right":"wrong"}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span><em>${(L.counts||[])[i]||0}</em></div>`).join("")}</div>
-    <div class="panel" style="text-align:center;margin-top:12px;border-color:${ok?"var(--moss)":"var(--blood)"}"><b>${!mine?"You didn't answer.":ok?(first?"Right, and fastest! +2":"Right! +1"):"Wrong. Drink up."}</b></div>${end}`}
+    <div class="panel" style="text-align:center;margin-top:12px;border-color:${ok?"var(--moss)":"var(--blood)"}"><b>${out?"You sat this one out.":!mine?"You didn't answer. Drink anyway.":ok?(first?"Right, and fastest! +2":"Right! +1"):"Wrong. Drink up."}</b></div>
+    <div style="height:12px"></div><button class="btn" data-act="tnext">${last?"See final scores":"Next question"}</button>${end}`}
 function vTVTrivia(){const t=TI(),q=tQ(t);
-  if(t.status==="done"||!q)return tvFrame("Trivia",`<div class="card"><div class="award">Trivia · final scores</div>${(t.winners||[]).length?`<div class="who">${t.winners.map(id=>esc(nm(id))).join(" & ")}</div><div class="what">wins +3 bonus points</div>`:""}</div><div class="panel">${tTally(t,6)}</div>`);
-  const L=t.last||{},rev=t.status==="reveal",N=triviaPlayers().length,n=tAnswers(t).length;
-  return `<div class="tv tvt"><div class="stack" style="min-width:0"><div class="brand">Trivia<small>Question ${t.qi+1} of ${(t.qs||[]).length} · ${esc(q.cat)}</small></div>
+  if(t.status==="done"||!q)return tvFrame("Trivia",`<div class="card"><div class="award">Trivia · final scores</div>${(t.winners||[]).length?`<div class="who">${t.winners.map(id=>esc(nm(id))).join(" & ")}</div><div class="what">wins +3 bonus points</div>`:`<div class="what">Start a new game from the Now tab.</div>`}</div><div class="panel">${tTally(t,6)}</div>`);
+  const L=t.last||{},show=t.status==="show",wait=tWaiting(t),N=triviaPlayers().length;
+  return `<div class="tv tvt"><div class="stack" style="min-width:0"><div class="brand">Trivia<small>Question ${(t.qi||0)+1} of ${(t.qs||[]).length} · ${esc(q.cat)}</small></div>
     <div class="tq">${esc(q.text)}</div>
-    <div class="topts big">${q.opts.map((o,i)=>`<div class="topt ${rev?(i===q.right?"right":"wrong"):""}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span>${rev?`<em>${(L.counts||[])[i]||0}</em>`:""}</div>`).join("")}</div></div>
-    <div class="stack" style="min-width:0;justify-content:center">${rev?`<div class="card"><div class="award">${(L.right||[]).length?"Fastest":"Nobody got it"}</div>${(L.right||[]).length?`<div class="who">${esc(nm(L.right[0]))}</div><div class="what">${L.right.length} got it right</div>`:`<div class="what">Everyone drinks.</div>`}</div>`
-      :`<div class="tvtimer" data-ends="${t.startAt+T_SECS*1000}"></div><div class="stat"><b>${n}/${N}</b>locked in · answer on your phone</div>`}
+    <div class="topts big">${q.opts.map((o,i)=>`<div class="topt ${show?(i===q.right?"right":"wrong"):""}" style="--tc:${TCOL[i]}"><b>${TLET[i]}</b><span>${esc(o)}</span>${show?`<em>${(L.counts||[])[i]||0}</em>`:""}</div>`).join("")}</div></div>
+    <div class="stack" style="min-width:0;justify-content:center">${show?`<div class="card"><div class="award">${(L.right||[]).length?"Fastest":"Nobody got it"}</div>${(L.right||[]).length?`<div class="who">${esc(nm(L.right[0]))}</div><div class="what">${L.right.length} got it right</div>`:`<div class="what">Everyone drinks.</div>`}</div>`
+      :`<div class="card"><div class="award">Answer on your phone</div><div class="who">${N-wait.length}/${N}</div><div class="what">${wait.length?"Still thinking: "+wait.slice(0,6).map(id=>esc(nm(id))).join(", ")+(wait.length>6?"…":""):"Everyone's in!"}</div></div>`}
     <div class="panel">${tTally(t,6)}</div>${sideStrip()}</div></div>`}
 
 /* ================= sabotage ================= */
@@ -1070,7 +1099,7 @@ const holdActs={
   die:()=>{if(!(K().dead||[]).some(d=>d.id===ME))up({"killer.dead":FV.arrayUnion({id:ME,at:Date.now()})}).then(()=>{addLog({type:"death",pid:ME,round:K().round});toast("Rest in pieces. Take a drink.")})},
   resetgames:()=>hostReset(true),wipe:()=>hostReset(false),
   closeside:()=>up({"side.open":false}).then(()=>toast("Side room closed. Everyone is back in the TV room.")),
-  pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,tstart:startTrivia,tend:triviaEnd,
+  pictstart:startPict,pictend:pictEnd,pictskip:pictSkip,tstart:startTrivia,tend:triviaEnd,treveal:tReveal,
   sabgo:()=>doSab(ui.sabKind||"drink",ui.sabTarget),
   awnow:awardsWrite,
   awreplay:()=>up({"awards.step":0,"awards.done":false,"awards.nonce":Date.now(),"awards.stepAt":Date.now()})
@@ -1106,7 +1135,7 @@ const acts={
   joinside(){if(ME&&sideOpen())up({["players."+ME+".room"]:"side"}).then(()=>toast("You're in the side room"))},
   leaveside(){if(!ME)return;const last=members("side").filter(id=>id!==ME).length===0,o={["players."+ME+".room"]:"main"};if(last)o["side.open"]=false;up(o).then(()=>toast(last?"Side room closed":"Back in the TV room"))},
   opt(el){const g=el.dataset.g,out=!isOut(ME,g);up({["players."+ME+".out."+g]:out}).then(()=>toast(out?"You're sitting out of "+GAMES[g]:"Welcome back to "+GAMES[g]))},
-  tans:tAnswer,
+  tans:tAnswer,tnext:tNext,
   setfocus(el){up({focus:mkFocus(el.dataset.g)})},
   editpts(){ui.editPts=!ui.editPts;render()},
   pictgo:pictGo,ppass:pictPass,pdone:()=>pictDone(false),
@@ -1163,13 +1192,13 @@ function boot(){
   try{FS.settings({experimentalForceLongPolling:true,merge:true})}catch(e){}
   FV=firebase.firestore.FieldValue;PARTY=FS.collection("parties").doc(PARTY_ID);
   setTimeout(()=>{if(S.loaded)return;const last=DIAG.slice(-3).map(esc).join("<br>")||"No error reported.";
-    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v14<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
+    document.getElementById("main").innerHTML=`<div class="panel stack"><h2>Still summoning…</h2><p>The party database isn't answering. Screenshot this and send it to Claude.</p><p class="mono muted">${navigator.onLine?"Phone is online":"Phone is offline"} · v15<br>${last}</p><button class="btn ghost" onclick="location.reload()">Try again</button></div>`},12000);
   PARTY.onSnapshot(s=>{S.main=s.exists?s.data():null;S.loaded=true;
     if(S.main&&ME&&!S.main.players[ME]&&S.main.created&&s.metadata&&!s.metadata.fromCache){/* removed or wiped */}
     if(!S.main||!S.main.reveal)ui.revealShown=null;
     render()},e=>{console.error(e);S.loaded=true;setup("Can't reach the party database. If you're the host, check the Firestore rules allow reads and writes.")});
   const col=(name,key)=>PARTY.collection(name).onSnapshot(q=>{S[key]=q.docs.map(d=>({id:d.id,...d.data()}));render()},e=>console.error(e));
-  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");col("log","log");col("pguess","pg");col("tans","ta");
+  col("ballots","ballots");col("acc","acc");col("hotvotes","hot");col("log","log");col("pguess","pg");col("qans","qa");
   PARTY.collection("draw").doc("live").onSnapshot(d=>{S.draw=d.exists?d.data():null;paintCanvases()},()=>{});
   if(ME&&MODE==="phone")PARTY.collection("roles").doc(ME).onSnapshot(d=>{S.role=d.exists?d.data():null;render()},()=>{});
   if(EASEL){const hb=()=>{if(S.main)PARTY.update({easelSeen:Date.now()}).catch(()=>{})};setTimeout(hb,1500);setInterval(hb,30000);try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}}
